@@ -3191,6 +3191,34 @@
 			(embedded_fonts no)
 		)
 	)
+	(text "I2C"
+		(exclude_from_sim no)
+		(at 254.508 103.632 0)
+		(effects
+			(font
+				(size 2 2)
+				(thickness 0.25)
+			)
+		)
+		(uuid "b3190ed1-fdce-4bfb-9e8c-0004f610a646")
+	)
+	(text "I2C"
+		(exclude_from_sim no)
+		(at 122.682 74.676 0)
+		(effects
+			(font
+				(size 2 2)
+				(thickness 0.25)
+			)
+		)
+		(uuid "c66830b7-6e82-49d2-940f-93c7f2d56b92")
+	)
+	(junction
+		(at 147.32 215.9)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "29512f1d-f5f9-4997-ae1b-9637b37f9e37")
+	)
 	(junction
 		(at 326.39 215.9)
 		(diameter 0)
@@ -3228,16 +3256,10 @@
 		(uuid "bf77e8ec-390c-44a9-a8c3-8766a83a9528")
 	)
 	(junction
-		(at 142.24 215.9)
+		(at 133.35 210.82)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "c0d84001-b1ca-4c29-abf8-b6d66724be99")
-	)
-	(junction
-		(at 154.94 210.82)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "d7798786-b78f-4fa0-95b2-9dd63bd2eb27")
+		(uuid "d7e83782-b6c5-4b37-a4af-e236012da3c8")
 	)
 	(junction
 		(at 363.22 210.82)
@@ -3283,7 +3305,7 @@
 	)
 	(wire
 		(pts
-			(xy 165.1 63.5) (xy 248.92 63.5)
+			(xy 143.51 63.5) (xy 248.92 63.5)
 		)
 		(stroke
 			(width 0)
@@ -3343,13 +3365,13 @@
 	)
 	(wire
 		(pts
-			(xy 233.68 71.12) (xy 233.68 45.72)
+			(xy 116.84 48.26) (xy 116.84 60.96)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "0a670d0d-d7d9-4655-8eec-08f93c7f5b4b")
+		(uuid "0bb0dd80-e618-4ca8-90d8-b12cd1052c3c")
 	)
 	(wire
 		(pts
@@ -3443,7 +3465,17 @@
 	)
 	(wire
 		(pts
-			(xy 39.37 215.9) (xy 142.24 215.9)
+			(xy 116.84 48.26) (xy 130.81 48.26)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "21931b75-ed0d-49a7-b846-c964908a352a")
+	)
+	(wire
+		(pts
+			(xy 39.37 215.9) (xy 147.32 215.9)
 		)
 		(stroke
 			(width 0)
@@ -3473,7 +3505,7 @@
 	)
 	(wire
 		(pts
-			(xy 119.38 58.42) (xy 111.76 58.42)
+			(xy 114.3 58.42) (xy 111.76 58.42)
 		)
 		(stroke
 			(width 0)
@@ -3503,7 +3535,7 @@
 	)
 	(wire
 		(pts
-			(xy 154.94 73.66) (xy 154.94 210.82)
+			(xy 133.35 73.66) (xy 133.35 210.82)
 		)
 		(stroke
 			(width 0)
@@ -3603,7 +3635,7 @@
 	)
 	(wire
 		(pts
-			(xy 119.38 48.26) (xy 39.37 48.26)
+			(xy 114.3 48.26) (xy 39.37 48.26)
 		)
 		(stroke
 			(width 0)
@@ -3633,7 +3665,7 @@
 	)
 	(wire
 		(pts
-			(xy 116.84 63.5) (xy 144.78 63.5)
+			(xy 116.84 63.5) (xy 123.19 63.5)
 		)
 		(stroke
 			(width 0)
@@ -3733,23 +3765,13 @@
 	)
 	(wire
 		(pts
-			(xy 142.24 45.72) (xy 142.24 215.9)
+			(xy 147.32 48.26) (xy 147.32 215.9)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
 		(uuid "48893994-4b27-454f-8cb2-0884a55d91c5")
-	)
-	(wire
-		(pts
-			(xy 233.68 45.72) (xy 157.48 45.72)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "48e53235-3e08-4293-8ca2-1912fa04a866")
 	)
 	(wire
 		(pts
@@ -3773,6 +3795,16 @@
 	)
 	(wire
 		(pts
+			(xy 111.76 60.96) (xy 116.84 60.96)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4e36edb1-667d-4be8-bb08-f052a0d35cc0")
+	)
+	(wire
+		(pts
 			(xy 388.62 210.82) (xy 391.16 210.82)
 		)
 		(stroke
@@ -3783,7 +3815,17 @@
 	)
 	(wire
 		(pts
-			(xy 119.38 60.96) (xy 144.78 60.96)
+			(xy 147.32 215.9) (xy 171.45 215.9)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "532acdb5-b18a-4986-83bc-c776103dc810")
+	)
+	(wire
+		(pts
+			(xy 119.38 60.96) (xy 123.19 60.96)
 		)
 		(stroke
 			(width 0)
@@ -3803,16 +3845,6 @@
 	)
 	(wire
 		(pts
-			(xy 152.4 45.72) (xy 152.4 48.26)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "5ee80b44-8c56-42b4-9066-c8f3fe7d25e5")
-	)
-	(wire
-		(pts
 			(xy 210.82 228.6) (xy 210.82 153.67)
 		)
 		(stroke
@@ -3823,7 +3855,7 @@
 	)
 	(wire
 		(pts
-			(xy 119.38 48.26) (xy 119.38 58.42)
+			(xy 114.3 48.26) (xy 114.3 58.42)
 		)
 		(stroke
 			(width 0)
@@ -4103,7 +4135,7 @@
 	)
 	(wire
 		(pts
-			(xy 78.74 210.82) (xy 154.94 210.82)
+			(xy 78.74 210.82) (xy 133.35 210.82)
 		)
 		(stroke
 			(width 0)
@@ -4130,6 +4162,16 @@
 			(type default)
 		)
 		(uuid "b5dd3303-7c3c-4b4e-b229-f00ba647a967")
+	)
+	(wire
+		(pts
+			(xy 133.35 210.82) (xy 275.59 210.82)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b76b16e6-b17f-4c00-b76b-971c22276254")
 	)
 	(wire
 		(pts
@@ -4160,16 +4202,6 @@
 			(type default)
 		)
 		(uuid "c0156d6c-830e-43ae-9e90-98698a03c888")
-	)
-	(wire
-		(pts
-			(xy 142.24 215.9) (xy 171.45 215.9)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "c08ddf63-586e-4640-a177-c8ed4f8f4373")
 	)
 	(wire
 		(pts
@@ -4213,7 +4245,7 @@
 	)
 	(wire
 		(pts
-			(xy 165.1 60.96) (xy 251.46 60.96)
+			(xy 143.51 60.96) (xy 251.46 60.96)
 		)
 		(stroke
 			(width 0)
@@ -4243,23 +4275,13 @@
 	)
 	(wire
 		(pts
-			(xy 152.4 45.72) (xy 142.24 45.72)
+			(xy 135.89 48.26) (xy 147.32 48.26)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
 		(uuid "d0c592e7-788d-4313-9492-9d6ed6d3b8a6")
-	)
-	(wire
-		(pts
-			(xy 154.94 210.82) (xy 275.59 210.82)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "d0c74a7d-1c78-4666-b2c0-48e3ee74d895")
 	)
 	(wire
 		(pts
@@ -4350,16 +4372,6 @@
 			(type default)
 		)
 		(uuid "e95c557b-f14c-43f9-83d6-98ee7d86971f")
-	)
-	(wire
-		(pts
-			(xy 157.48 45.72) (xy 157.48 48.26)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "f1a69994-3008-4203-9484-5774b85bc750")
 	)
 	(wire
 		(pts
@@ -5209,7 +5221,7 @@
 	)
 	(symbol
 		(lib_id "Interface:PCA9306")
-		(at 154.94 60.96 0)
+		(at 133.35 60.96 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -5218,7 +5230,7 @@
 		(fields_autoplaced yes)
 		(uuid "b23d046b-71f2-4066-b8ed-00064df15f5e")
 		(property "Reference" "U2"
-			(at 157.0833 73.66 0)
+			(at 135.4933 73.66 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5227,7 +5239,7 @@
 			)
 		)
 		(property "Value" "PCA9306"
-			(at 157.0833 76.2 0)
+			(at 135.4933 76.2 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5236,7 +5248,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 144.78 52.07 0)
+			(at 123.19 52.07 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5245,7 +5257,7 @@
 			)
 		)
 		(property "Datasheet" "http://www.ti.com/lit/ds/symlink/pca9306.pdf"
-			(at 147.32 49.53 0)
+			(at 125.73 49.53 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5254,7 +5266,7 @@
 			)
 		)
 		(property "Description" "Dual bidirectional I2C Bus and SMBus voltage level translator"
-			(at 154.94 60.96 0)
+			(at 133.35 60.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
