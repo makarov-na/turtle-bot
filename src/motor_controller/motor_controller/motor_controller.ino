@@ -23,18 +23,20 @@ void setup() {
 }
 
 void loop() {
+  // ИСПРАВЛЕНИЕ: ПРАВИЛЬНОЕ НАПРАВЛЕНИЕ ВПЕРЕД
   // Разгон вперед (0 → 100% за 10 сек)
-  digitalWrite(IN1_R, HIGH);
-  digitalWrite(IN2_R, LOW);
+  digitalWrite(IN1_R, HIGH);  // ИСПРАВЛЕНО
+  digitalWrite(IN2_R, LOW);   // ИСПРАВЛЕНО
   accelerateMotor(MIN_SPEED, MAX_SPEED);
   
   // Остановка на 3 секунды
   brakeMotor();
   delay(3000);
   
+  // ИСПРАВЛЕНИЕ: ПРАВИЛЬНОЕ НАПРАВЛЕНИЕ НАЗАД
   // Разгон назад (0 → 100% за 10 сек)
-  digitalWrite(IN1_R, LOW);
-  digitalWrite(IN2_R, HIGH);
+  digitalWrite(IN1_R, LOW);   // ИСПРАВЛЕНО
+  digitalWrite(IN2_R, HIGH);  // ИСПРАВЛЕНО
   accelerateMotor(MIN_SPEED, MAX_SPEED);
   
   // Финальная остановка
