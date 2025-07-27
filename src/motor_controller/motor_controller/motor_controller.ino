@@ -17,26 +17,20 @@ void setup() {
   pinMode(IN2_R, OUTPUT);
   
   // Изначальная остановка мотора
-  digitalWrite(IN1_R, LOW);
-  digitalWrite(IN2_R, LOW);
-  analogWrite(ENA_R, 0);
+  brakeMotor();
 }
 
 void loop() {
-  // ИСПРАВЛЕНИЕ: ПРАВИЛЬНОЕ НАПРАВЛЕНИЕ ВПЕРЕД
-  // Разгон вперед (0 → 100% за 10 сек)
-  digitalWrite(IN1_R, HIGH);  // ИСПРАВЛЕНО
-  digitalWrite(IN2_R, LOW);   // ИСПРАВЛЕНО
+  // Вперед с разгоном
+  setMotorForward();
   accelerateMotor(MIN_SPEED, MAX_SPEED);
   
   // Остановка на 3 секунды
   brakeMotor();
   delay(3000);
   
-  // ИСПРАВЛЕНИЕ: ПРАВИЛЬНОЕ НАПРАВЛЕНИЕ НАЗАД
-  // Разгон назад (0 → 100% за 10 сек)
-  digitalWrite(IN1_R, LOW);   // ИСПРАВЛЕНО
-  digitalWrite(IN2_R, HIGH);  // ИСПРАВЛЕНО
+  // Назад с разгоном
+  setMotorBackward();
   accelerateMotor(MIN_SPEED, MAX_SPEED);
   
   // Финальная остановка
@@ -44,6 +38,18 @@ void loop() {
   
   // Остановка программы
   while(true);
+}
+
+// Установить направление "Вперед"
+void setMotorForward() {
+  digitalWrite(IN1_R, HIGH);
+  digitalWrite(IN2_R, LOW);
+}
+
+// Установить направление "Назад"
+void setMotorBackward() {
+  digitalWrite(IN1_R, LOW);
+  digitalWrite(IN2_R, HIGH);
 }
 
 // Функция плавного разгона/торможения
