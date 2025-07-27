@@ -14,6 +14,8 @@ const int MAX_SPEED = 255;  // Максимальная скорость
 const int ACCEL_STEPS = 100; // Шагов разгона
 const int ACCEL_TIME = 10000; // Время разгона (мс)
 const int STEP_DELAY = ACCEL_TIME / ACCEL_STEPS; // Задержка между шагами
+const int BRAKE_POWER = 150; // Мощность торможения (0-255)
+const int BRAKE_TIME = 300;  // Время торможения (мс)
 
 void setup() {
   // Настройка пинов управления как выходы
@@ -37,17 +39,17 @@ void loop() {
   setLeftMotorBackward();
   accelerateMotors(MIN_SPEED, MAX_SPEED);
   
-  // Остановка на 3 секунды
-  brakeMotors();
-  delay(3000);
+  // Остановка на 3 секунды с активным торможением
+  activeBrake();
+  delay(3000 - BRAKE_TIME); // Компенсируем время торможения
   
   // Движение назад с разгоном
   setRightMotorBackward();
   setLeftMotorForward();
   accelerateMotors(MIN_SPEED, MAX_SPEED);
   
-  // Финальная остановка
-  brakeMotors();
+  // Финальная остановка с активным торможением
+  activeBrake();
   
   // Остановка программы
   while(true);
@@ -92,7 +94,7 @@ void accelerateMotors(int startSpeed, int endSpeed) {
   analogWrite(ENB_L, endSpeed);
 }
 
-// Функция остановки обоих моторов
+// Функция пассивной остановки моторов
 void brakeMotors() {
   // Правый мотор
   analogWrite(ENA_R, 0);
@@ -103,4 +105,34 @@ void brakeMotors() {
   analogWrite(ENB_L, 0);
   digitalWrite(IN3_L, LOW);
   digitalWrite(IN4_L, LOW);
+}
+
+// Функция активного торможения с обратным усилием
+void activeBrake() {
+  // Определение текущего направления
+  bool rightForward = (digitalRead(IN1_R) == LOW && digitalRead(IN2_R) == HIGH);
+  bool leftForward = (digitalRead(IN3_L) == LOW && digitalRead(IN4_L) == HIGH);
+  
+  // Подача обратного напряжения
+  if(rightForward) {
+    setRightMotorBackward();
+  } else {
+    setRightMotorForward();
+  }
+  
+  if(leftForward) {
+    setLeftMotorBackward();
+  } else {
+    setLeftMotorForward();
+  }
+  
+  // Подача тормозного усилия
+  analogWrite(ENA_R, BRAKE_POWER);
+  analogWrite(ENB_L, BRAKE_POWER);
+  
+  // Длительность торможения
+  delay(BRAKE_TIME);
+  
+  // Полная остановка
+  brakeMotors();
 }
