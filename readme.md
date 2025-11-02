@@ -13,7 +13,9 @@ components. Source files in FreeCAD format are available.
 под различные компоненты. Для всех деталей доступны исходники в 
 формате FreeCAD.
 
-![bot.png](docs/media/bot.png)
+[Ход проекта на YouTube](https://www.youtube.com/playlist?list=PLKxQTQ3TZlLEd_6ZOf-SUxFQ7dUuGvq06)
+
+![bot.png](docs/media/bot.png)Компонентная архитектура
 
 * [Компонентная архитектура](docs/1.%20%D0%9A%D0%BE%D0%BC%D0%BF%D0%BE%D0%BD%D0%B5%D0%BD%D1%82%D0%BD%D0%B0%D1%8F%20%D0%B0%D1%80%D1%85%D0%B8%D1%82%D0%B5%D0%BA%D1%82%D1%83%D1%80%D0%B0/%D0%9A%D0%BE%D0%BC%D0%BF%D0%BE%D0%BD%D0%B5%D0%BD%D1%82%D0%BD%D0%B0%D1%8F%20%D0%B0%D1%80%D1%85%D0%B8%D1%82%D0%B5%D0%BA%D1%82%D1%83%D1%80%D0%B0.md)
 * [Список компонентов](docs/%D0%A1%D0%BF%D0%B8%D1%81%D0%BE%D0%BA%20%D0%BA%D0%BE%D0%BC%D0%BF%D0%BE%D0%BD%D0%B5%D0%BD%D1%82%D0%BE%D0%B2/%D0%A1%D0%BF%D0%B8%D1%81%D0%BE%D0%BA%20%D0%BA%D0%BE%D0%BC%D0%BF%D0%BE%D0%BD%D0%B5%D0%BD%D1%82%D0%BE%D0%B2.md)
