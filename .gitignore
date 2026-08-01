@@ -1,3 +1,4 @@
 .gigaide/
 .idea/
 *.FCBak
+.opencode/
