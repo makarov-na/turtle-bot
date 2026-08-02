@@ -15,14 +15,14 @@
 #define PIN_IN1_R  2
 #define PIN_IN2_R  3
 #define PIN_ENA_R  5
-#define PIN_ENC_R_A 10
-#define PIN_ENC_R_B 11
+#define PIN_ENC_R_A 8
+#define PIN_ENC_R_B 9
 
 #define PIN_IN3_L  4
 #define PIN_IN4_L  7
 #define PIN_ENB_L  6
-#define PIN_ENC_L_A 8
-#define PIN_ENC_L_B 9
+#define PIN_ENC_L_A 10
+#define PIN_ENC_L_B 11
 
 const float WHEEL_DIAMETER_MM = 67.0f;
 const float WHEELBASE_MM = 160.0f;
@@ -33,6 +33,9 @@ const uint32_t RAMP_DURATION_MS = 1000;
 const uint32_t BRAKE_DURATION_MS = 300;
 const uint32_t PID_PERIOD_MS = 10;
 const uint16_t MIN_TICK_US = 50;
+
+const float TEST_SPEED_MM_S = 250.0f;
+const uint32_t TEST_RUN_TIME_MS = 9000;
 
 const uint16_t ENCODER_CPR  = 11;
 const uint8_t  GEAR_RATIO   = 56;
@@ -166,8 +169,8 @@ void updateEncoder(int wheel, uint8_t state) {
 
 ISR(PCINT0_vect) {
   uint8_t pins = PINB & 0x0F;
-  updateEncoder(WHEEL_LEFT, pins & 0x03);
-  updateEncoder(WHEEL_RIGHT, (pins >> 2) & 0x03);
+  updateEncoder(WHEEL_LEFT, (pins >> 2) & 0x03);
+  updateEncoder(WHEEL_RIGHT, pins & 0x03);
 }
 
 void set_speed(float linearSpeed, float angularSpeed) {
@@ -260,10 +263,10 @@ void loop() {
   if (!demoStarted) {
     demoStarted = true;
     demoStartMs = now;
-    set_speed(0.0f, 0.0f);
+    set_speed(TEST_SPEED_MM_S, 0.0f);
   }
-  if (!demoStopped && now - demoStartMs >= 10000UL) {
+  if (!demoStopped && now - demoStartMs >= TEST_RUN_TIME_MS) {
     demoStopped = true;
-    stop();
+    power_stop();
   }
 }
