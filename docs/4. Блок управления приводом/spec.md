@@ -43,3 +43,5 @@
 
 Рабочий прототип реализован на arduino nano src/motor_controller/motor_controller/motor_controller.ino
 Ничего из прототипа переносить не нужно. Нужно использовать для уточнений по подключению и направлениям моторов.
+
+opencode -s ses_0411ac1bdffeHer3b0Qv4bnJya
