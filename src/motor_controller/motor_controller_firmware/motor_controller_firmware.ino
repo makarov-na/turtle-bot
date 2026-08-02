@@ -24,7 +24,7 @@
 #define PIN_ENC_L_A 8
 #define PIN_ENC_L_B 9
 
-const float WHEEL_DIAMETER_MM = 66.0f;
+const float WHEEL_DIAMETER_MM = 67.0f;
 const float WHEELBASE_MM = 160.0f;
 const float V_MAX_MM_S = 300.0f;
 const float OMEGA_MAX_RAD_S = 2.0f * V_MAX_MM_S / WHEELBASE_MM;
@@ -34,8 +34,8 @@ const uint32_t BRAKE_DURATION_MS = 300;
 const uint32_t PID_PERIOD_MS = 10;
 const uint16_t MIN_TICK_US = 50;
 
-const uint16_t ENCODER_CPR = 20;
-const uint8_t GEAR_RATIO = 30;
+const uint16_t ENCODER_CPR  = 11;
+const uint8_t  GEAR_RATIO   = 56;
 const uint32_t TICKS_PER_WHEEL_REV = ENCODER_CPR * 4UL * GEAR_RATIO;
 
 const float PID_KP = 1.5f;
