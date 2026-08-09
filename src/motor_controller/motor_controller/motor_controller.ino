@@ -24,7 +24,7 @@
 #define PIN_ENC_L_B 11
 
 const float WHEEL_DIAMETER_MM = 67.0f;
-const float WHEELBASE_MM = 160.0f;
+const float WHEELBASE_MM = 185.0f;
 const float V_MAX_MM_S = 300.0f;
 const float OMEGA_MAX_RAD_S = 2.0f * V_MAX_MM_S / WHEELBASE_MM;
 
