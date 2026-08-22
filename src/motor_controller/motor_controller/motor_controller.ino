@@ -10,6 +10,10 @@
 //
 // Подключение и направления моторов сверять с
 // docs/4. Блок управления приводом/spec.md
+//
+// HC-06 Bluetooth: D12 (RX), D13 (TX), 9600 baud, через level shifter
+
+#include <SoftwareSerial.h>
 
 #define PIN_IN1_R  2
 #define PIN_IN2_R  3
@@ -22,6 +26,10 @@
 #define PIN_ENB_L  6
 #define PIN_ENC_L_A 10
 #define PIN_ENC_L_B 11
+
+#define PIN_BT_RX 12
+#define PIN_BT_TX 13
+#define BT_BAUD 9600
 
 const float WHEEL_DIAMETER_MM = 67.0f;
 const float WHEELBASE_MM = 185.0f;
@@ -141,6 +149,8 @@ struct Wheel {
   }
 };
 
+SoftwareSerial btSerial(PIN_BT_RX, PIN_BT_TX);
+
 Wheel wheels[2] = {
     {PIN_ENB_L, PIN_IN3_L, PIN_IN4_L, -1},
     {PIN_ENA_R, PIN_IN1_R, PIN_IN2_R, +1}
@@ -149,6 +159,7 @@ Wheel wheels[2] = {
 DriveState driveState = STATE_STOPPED;
 uint32_t brakeStartMs = 0;
 uint32_t lastControlMs = 0;
+uint32_t lastBtSendMs = 0;
 
 static uint8_t prevEncState[2] = {0, 0};
 static uint32_t lastTickMicros[2] = {0, 0};
@@ -166,11 +177,8 @@ void updateEncoder(int wheel, uint8_t state) {
   }
 }
 
-ISR(PCINT0_vect) {
-  uint8_t pins = PINB & 0x0F;
-  updateEncoder(WHEEL_LEFT, (pins >> 2) & 0x03);
-  updateEncoder(WHEEL_RIGHT, pins & 0x03);
-}
+// ISR(PCINT0_vect) — отключён временно для совместимости с SoftwareSerial
+// Энкодеры не работают до замены на AltSoftSerial или переноса на другой Arduino
 
 void set_speed(float linearSpeed, float angularSpeed) {
   float vRight = linearSpeed + angularSpeed * WHEELBASE_MM / 2.0f;
@@ -239,8 +247,12 @@ void setup() {
   wheels[WHEEL_RIGHT].coast();
   driveState = STATE_STOPPED;
 
-  PCICR |= (1 << PCIE0);
-  PCMSK0 |= (1 << PCINT0) | (1 << PCINT1) | (1 << PCINT2) | (1 << PCINT3);
+  // PCICR/PCMSK — отключены временно (энкодеры не работают)
+  // PCICR |= (1 << PCIE0);
+  // PCMSK0 |= (1 << PCINT0) | (1 << PCINT1) | (1 << PCINT2) | (1 << PCINT3);
+
+  btSerial.begin(BT_BAUD);
+  btSerial.println("hello PC from ARDU");
 }
 
 void loop() {
@@ -267,5 +279,10 @@ void loop() {
   if (!demoStopped && now - demoStartMs >= TEST_RUN_TIME_MS) {
     demoStopped = true;
     power_stop();
+  }
+
+  if (now - lastBtSendMs >= 1000) {
+    lastBtSendMs = now;
+    btSerial.println("hello PC from ARDU");
   }
 }
