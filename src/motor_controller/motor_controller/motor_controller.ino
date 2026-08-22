@@ -18,14 +18,14 @@
 #define PIN_IN1_R  2
 #define PIN_IN2_R  3
 #define PIN_ENA_R  5
-#define PIN_ENC_R_A 8
-#define PIN_ENC_R_B 9
+#define PIN_ENC_R_A A0
+#define PIN_ENC_R_B A1
 
 #define PIN_IN3_L  4
 #define PIN_IN4_L  7
 #define PIN_ENB_L  6
-#define PIN_ENC_L_A 10
-#define PIN_ENC_L_B 11
+#define PIN_ENC_L_A A2
+#define PIN_ENC_L_B A3
 
 #define PIN_BT_RX 12
 #define PIN_BT_TX 13
@@ -177,8 +177,11 @@ void updateEncoder(int wheel, uint8_t state) {
   }
 }
 
-// ISR(PCINT0_vect) — отключён временно для совместимости с SoftwareSerial
-// Энкодеры не работают до замены на AltSoftSerial или переноса на другой Arduino
+ISR(PCINT1_vect) {
+  uint8_t pins = PINC & 0x0F;
+  updateEncoder(WHEEL_LEFT, (pins >> 2) & 0x03);
+  updateEncoder(WHEEL_RIGHT, pins & 0x03);
+}
 
 void set_speed(float linearSpeed, float angularSpeed) {
   float vRight = linearSpeed + angularSpeed * WHEELBASE_MM / 2.0f;
@@ -247,9 +250,8 @@ void setup() {
   wheels[WHEEL_RIGHT].coast();
   driveState = STATE_STOPPED;
 
-  // PCICR/PCMSK — отключены временно (энкодеры не работают)
-  // PCICR |= (1 << PCIE0);
-  // PCMSK0 |= (1 << PCINT0) | (1 << PCINT1) | (1 << PCINT2) | (1 << PCINT3);
+  PCICR |= (1 << PCIE1);
+  PCMSK1 |= (1 << PCINT8) | (1 << PCINT9) | (1 << PCINT10) | (1 << PCINT11);
 
   btSerial.begin(BT_BAUD);
   btSerial.println("hello PC from ARDU");
