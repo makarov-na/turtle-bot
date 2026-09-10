@@ -11,9 +11,12 @@
 // Подключение и направления моторов сверять с
 // docs/4. Блок управления приводом/spec.md
 //
-// HC-06 Bluetooth: D12 (RX), D13 (TX), 9600 baud, через level shifter
-
-#include <SoftwareSerial.h>
+// HC-06 Bluetooth: D0 (RX), D1 (TX), 9600 baud, Hardware Serial
+//   HC-06 TX → D0 (напрямую, 3.3V читается как HIGH на 5V-логике)
+//   HC-06 RX ← D1 (через делитель 5V → 3.3V, RX HC-06 не 5V-tolerant)
+//   ВНИМАНИЕ: при перепрошивке через USB отключать HC-06 (загрузчик
+//   использует D0/D1). SoftwareSerial не используется — его PCINT-алиасы
+//   конфликтуют с ISR(PCINT1_vect) энкодеров на ATmega328P.
 
 #define PIN_IN1_R  2
 #define PIN_IN2_R  3
@@ -27,8 +30,6 @@
 #define PIN_ENC_L_A A2
 #define PIN_ENC_L_B A3
 
-#define PIN_BT_RX 12
-#define PIN_BT_TX 13
 #define BT_BAUD 9600
 
 const float WHEEL_DIAMETER_MM = 67.0f;
@@ -149,8 +150,6 @@ struct Wheel {
   }
 };
 
-SoftwareSerial btSerial(PIN_BT_RX, PIN_BT_TX);
-
 Wheel wheels[2] = {
     {PIN_ENB_L, PIN_IN3_L, PIN_IN4_L, -1},
     {PIN_ENA_R, PIN_IN1_R, PIN_IN2_R, +1}
@@ -253,8 +252,8 @@ void setup() {
   PCICR |= (1 << PCIE1);
   PCMSK1 |= (1 << PCINT8) | (1 << PCINT9) | (1 << PCINT10) | (1 << PCINT11);
 
-  btSerial.begin(BT_BAUD);
-  btSerial.println("hello PC from ARDU");
+  Serial.begin(BT_BAUD);
+  Serial.println("hello PC from ARDU");
 }
 
 void loop() {
@@ -285,6 +284,6 @@ void loop() {
 
   if (now - lastBtSendMs >= 1000) {
     lastBtSendMs = now;
-    btSerial.println("hello PC from ARDU");
+    Serial.println("hello PC from ARDU");
   }
 }

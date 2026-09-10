@@ -6,7 +6,7 @@ Define the mapping between motor encoders and wheel PID feedback channels, the p
 ## Requirements
 
 ### Requirement: Correct encoder-to-wheel mapping
-The controller SHALL associate each wheel's PID feedback channel with the encoder physically attached to that same wheel. The left wheel SHALL read the encoder connected to pins D10/D11 and the right wheel SHALL read the encoder connected to pins D8/D9, matching the physical wiring.
+The controller SHALL associate each wheel's PID feedback channel with the encoder physically attached to that same wheel. The left wheel SHALL read the encoder connected to pins A2/A3 and the right wheel SHALL read the encoder connected to pins A0/A1, matching the physical wiring.
 
 #### Scenario: Left wheel feedback reads left encoder
 - **WHEN** the left wheel's motor rotates and the right wheel's motor is stationary
@@ -36,7 +36,7 @@ Each wheel's measured speed SHALL be positive when the wheel drives the robot fo
 - **THEN** the wheel's sign compensation can be flipped in firmware and the wheel then reads the correct direction
 
 ### Requirement: Consistent wiring documentation
-The wiring reference SHALL state the encoder connections that match the physical hardware: left motor encoder on D10/D11 and right motor encoder on D8/D9, consistent with the firmware mapping.
+The wiring reference SHALL state the encoder connections that match the physical hardware: left motor encoder on A2/A3 and right motor encoder on A0/A1, consistent with the firmware mapping.
 
 #### Scenario: Documentation matches hardware
 - **WHEN** an operator rebuilds the wiring from the reference document
