@@ -15,6 +15,11 @@
     Right — угловая скорость -10%
     q     — выход (перед выходом боту уходит set_speed 0.0 0.0)
 
+Интерфейс — полноэкранная панель (alternate screen buffer): статус с
+абсолютными значениями команды, живая таблица последних 20 ack-ответов
+бота (свежие сверху, последний подсвечен инверсией) и футер-подсказки.
+На выходе экран восстанавливается.
+
 Текущая команда повторяется каждые 200 мс (heartbeat, питает watchdog
 прошивки). Используется только стандартная библиотека Python.
 """
@@ -23,11 +28,15 @@ import argparse
 import errno
 import fcntl
 import os
+import re
 import select
+import shutil
 import sys
 import termios
 import time
 import tty
+from collections import deque
+from dataclasses import dataclass
 
 HEARTBEAT_MS = 200
 STEP_PCT = 10.0
@@ -52,12 +61,12 @@ STOP_COMMAND = "set_speed 0.0 0.0\n"
 RECONNECT_ATTEMPTS = 5
 RECONNECT_DELAY_S = 0.5
 
+TELEMETRY_LINES = 20
+
+# Анти-грязь: если вдруг пойдёт мусор без перевода строки, буфер не растёт.
+MAX_RX_BUFFER = 512
+
 serial_fd = None
-
-
-def out(msg):
-    sys.stdout.write("\r\n" + msg + "\r\n")
-    sys.stdout.flush()
 
 
 def write_all(fd, data):
@@ -81,6 +90,135 @@ def send_command(fd, linear_pct, angular_pct):
 
 class LinkLost(Exception):
     pass
+
+
+def status_line(linear_pct, angular_pct):
+    linear_mm_s = linear_pct / 100.0 * V_MAX_MM_S
+    omega_rad_s = angular_pct / 100.0 * OMEGA_MAX_RAD_S
+    return ("lin {:+.0f}% ({:+.0f} мм/с)  ang {:+.0f}% ({:+.2f} рад/с)"
+            .format(linear_pct, linear_mm_s, angular_pct, omega_rad_s))
+
+
+# ---------------------------------------------------------------------------
+# Телеметрия: парсинг ack и кольцевой буфер последних значений.
+# Формат строки с бота (motor_controller.ino):
+#   ack <n> <v> <w> mL=<ml> mR=<mr> oL=<ol> oR=<or> iL=<il> iR=<ir>
+# mL/mR — измеренная скорость (мм/с), oL/oR — выход ШИМ (±255),
+# iL/iR — интеграл ПИД (±limit). Невалидные строки возвращают None.
+# ---------------------------------------------------------------------------
+_ACK_RE = re.compile(
+    r"^ack\s+(\d+)\s+([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)"
+    r"\s+mL=([-+]?\d*\.?\d+) mR=([-+]?\d*\.?\d+)"
+    r"\s+oL=([-+]?\d*\.?\d+) oR=([-+]?\d*\.?\d+)"
+    r"\s+iL=([-+]?\d*\.?\d+) iR=([-+]?\d*\.?\d+)\s*$"
+)
+
+
+@dataclass
+class Ack:
+    n: int
+    v: float
+    w: float
+    mL: float
+    mR: float
+    oL: float
+    oR: float
+    iL: float
+    iR: float
+
+
+def parse_ack(line):
+    m = _ACK_RE.match(line)
+    if not m:
+        return None
+    n, v, w, mL, mR, oL, oR, iL, iR = m.groups()
+    return Ack(int(n), float(v), float(w), float(mL), float(mR),
+               float(oL), float(oR), float(iL), float(iR))
+
+
+class TelemetryRing:
+    def __init__(self, maxlen=TELEMETRY_LINES):
+        self._items = deque(maxlen=maxlen)
+
+    def push(self, ack):
+        self._items.appendleft(ack)
+
+    def clear(self):
+        self._items.clear()
+
+    def items(self):
+        return list(self._items)
+
+
+# ---------------------------------------------------------------------------
+# Рендер панели (ANSI, alternate screen buffer). Чистые функции: без ввода-
+# вывода, тестируются без TTY.
+# ---------------------------------------------------------------------------
+_ESC = "\x1b"
+_TABLE_HEADER = "  #      v      w     mL     mR     oL     oR     iL     iR"
+
+
+def screen_on():
+    sys.stdout.write("{}[?1049h{}[?25l".format(_ESC, _ESC))
+    sys.stdout.flush()
+
+
+def screen_off():
+    sys.stdout.write("{}[?25h{}[?1049l".format(_ESC, _ESC))
+    sys.stdout.flush()
+
+
+def terminal_cols():
+    try:
+        cols = shutil.get_terminal_size(fallback=(80, 24)).columns
+    except Exception:
+        cols = 0
+    return cols if cols > 0 else 80
+
+
+def crop(line, cols):
+    if cols < 0:
+        cols = 0
+    line = line[:cols]
+    return line + " " * (cols - len(line))
+
+
+def invert_line(line):
+    return "{esc}[7m{line}{esc}[0m".format(esc=_ESC, line=line)
+
+
+def format_row(ack):
+    return "{:>4d} {:>6.1f} {:>6.2f} {:>6.1f} {:>6.1f} {:>6.1f} {:>6.1f} {:>6.1f} {:>6.1f}".format(
+        ack.n, ack.v, ack.w, ack.mL, ack.mR, ack.oL, ack.oR, ack.iL, ack.iR)
+
+
+def render_panel(status, rows, footer, cols=80):
+    """Статус + таблица последних ack (свежие сверху) + футер.
+
+    Возвращает строку с ESC[H у начала; финал ESC[J затирает остатки
+    предыдущей отрисовки. rows — итерация ack, индекс 0 = самый свежий.
+    """
+    lines = [crop(status, cols), ""]
+    lines.append(_TABLE_HEADER)
+    data_rows = 0
+    first = True
+    for ack in rows:
+        row = crop(format_row(ack), cols)
+        if first:
+            row = invert_line(row)
+            first = False
+        lines.append(row)
+        data_rows += 1
+    if data_rows == 0:
+        lines.append(crop("(нет ack — ждём телеметрию)", cols))
+        data_rows = 1
+    for _ in range(max(0, TELEMETRY_LINES - data_rows)):
+        lines.append(crop("", cols))
+    lines.append("")
+    for f in footer.split("\n"):
+        lines.append(crop(f, cols))
+    body = "\r\n".join(lines)
+    return "{}[H".format(_ESC) + body + "{}[J".format(_ESC)
 
 
 def send_stop():
@@ -170,38 +308,54 @@ def clamp(value):
     return max(CLAMP_MIN, min(CLAMP_MAX, value))
 
 
-def status_line(linear_pct, angular_pct):
-    return "\rlin {:+.0f}%  ang {:+.0f}%   ".format(linear_pct, angular_pct)
+FOOTER_HINTS = "lin: ↑/↓ · ang: ←/→ · q — выход"
 
 
-def run(fd, state):
+def draw_panel(ring, linear_pct, angular_pct, footer):
+    sys.stdout.write(render_panel(status_line(linear_pct, angular_pct),
+                                  ring.items(), footer, terminal_cols()))
+    sys.stdout.flush()
+
+
+def run(fd, state, ring):
     linear_pct = state["linear"]
     angular_pct = state["angular"]
     last_sent = 0.0
+    rx = b""
+    draw_panel(ring, linear_pct, angular_pct, FOOTER_HINTS)
     while True:
         now = time.monotonic()
         if now - last_sent >= HEARTBEAT_MS / 1000.0:
             send_command(fd, linear_pct, angular_pct)
             last_sent = now
 
-        sys.stdout.write(status_line(linear_pct, angular_pct))
-        sys.stdout.flush()
-
         timeout = max(0.0, last_sent + HEARTBEAT_MS / 1000.0 - now)
         r, _, _ = select.select([sys.stdin, fd], [], [], timeout)
+        now = time.monotonic()
+
         if fd in r:
-            # Keepalive-телеметрия бота ("ack ...") приходит на каждый наш
-            # пинг. Дренируем вход: иначе tty-буфер заполнится и упрётся
-            # во флоу-контроль канала. Содержимое пока не разбираем.
+            new_acks = False
             try:
                 while True:
                     data = os.read(fd, 4096)
                     if not data:
                         break
+                    if len(rx) + len(data) > MAX_RX_BUFFER:
+                        rx = rx[-(MAX_RX_BUFFER // 4):]
+                    rx += data
+                    while b"\n" in rx:
+                        line, rx = rx.split(b"\n", 1)
+                        ack = parse_ack(line.decode(errors="replace").strip())
+                        if ack is not None:
+                            ring.push(ack)
+                            new_acks = True
             except BlockingIOError:
                 pass
             except OSError as exc:
                 raise LinkLost() from exc
+            if new_acks:
+                draw_panel(ring, linear_pct, angular_pct, FOOTER_HINTS)
+
         if sys.stdin in r:
             key = read_key(sys.stdin.fileno())
             changed = True
@@ -226,6 +380,7 @@ def run(fd, state):
                 state["angular"] = angular_pct
                 send_command(fd, linear_pct, angular_pct)
                 last_sent = time.monotonic()
+                draw_panel(ring, linear_pct, angular_pct, FOOTER_HINTS)
 
 
 def main():
@@ -241,31 +396,43 @@ def main():
 
     old_attrs = termios.tcgetattr(sys.stdin.fileno())
     state = {"linear": 0.0, "angular": 0.0}
+    ring = TelemetryRing()
     try:
         tty.setraw(sys.stdin.fileno())
+        screen_on()
 
-        out("Стрелки: Up/Down — скорость, Left/Right — поворот, q — выход")
-
+        connected = False
         while True:
-            out("Подключение к {} ...".format(args.port))
-            try:
-                fd = open_serial(args.port, probe=format_command(state["linear"], state["angular"]))
-            except TimeoutError:
-                out("Ошибка: нет связи с ботом через {}. Проверь:".format(args.port))
-                out("  - бот включён и HC-06 спарен с ПК (PIN 1234);")
-                out("  - канал привязан: sudo rfcomm bind 0 <MAC> 1")
-                return 1
-            except OSError as exc:
-                out("Ошибка: не удалось открыть порт {}: {}".format(args.port, exc))
-                return 1
+            if not connected:
+                draw_panel(ring, state["linear"], state["angular"],
+                           "Подключение к {} ...".format(args.port))
+                try:
+                    fd = open_serial(args.port, probe=format_command(state["linear"], state["angular"]))
+                except TimeoutError:
+                    draw_panel(ring, state["linear"], state["angular"],
+                               "Ошибка: нет связи с ботом через {}.\n"
+                               "Проверь:\n"
+                               "  - бот включён и HC-06 спарен с ПК (PIN 1234);\n"
+                               "  - канал привязан: sudo rfcomm bind 0 <MAC> 1".format(args.port))
+                    time.sleep(1.2)
+                    return 1
+                except OSError as exc:
+                    draw_panel(ring, state["linear"], state["angular"],
+                               "Ошибка: не удалось открыть порт {}: {}".format(args.port, exc))
+                    time.sleep(1.2)
+                    return 1
+                connected = True
 
-            out("Связь есть. Ожидание команд...")
+            draw_panel(ring, state["linear"], state["angular"],
+                       "Связь есть. Ожидание команд...")
             try:
-                run(fd, state)
+                run(fd, state, ring)
                 return 0
             except LinkLost:
-                out("Связь потеряна, переподключение...")
+                draw_panel(ring, state["linear"], state["angular"],
+                           "Связь потеряна, переподключение...")
                 shutdown()
+                connected = False
                 reconnected = False
                 for _ in range(RECONNECT_ATTEMPTS):
                     time.sleep(RECONNECT_DELAY_S)
@@ -275,15 +442,23 @@ def main():
                         break
                     except (TimeoutError, OSError):
                         pass
-                if not reconnected:
-                    out("Не удалось восстановить связь за {} попыток.".format(RECONNECT_ATTEMPTS))
-                    out("Типично при просадке 5V во время работы моторов: HC-06 "
-                        "должен питаться от отдельного 5V и не проваливаться при токе L298N.")
-                    out("Поднять связь заново: bluetoothctl connect <MAC>")
-                    return 1
+                if reconnected:
+                    # Новое соединение — мёртвую телеметрию старой линии
+                    # не смешиваем со свежей.
+                    connected = True
+                    ring.clear()
+                    continue
+                draw_panel(ring, state["linear"], state["angular"],
+                           "Не удалось восстановить связь за {} попыток.\n"
+                           "Типично при просадке 5V во время работы моторов: HC-06\n"
+                           "должен питаться от отдельного 5V и не проваливаться при токе L298N.\n"
+                           "Поднять связь заново: bluetoothctl connect <MAC>".format(RECONNECT_ATTEMPTS))
+                time.sleep(1.2)
+                return 1
     except KeyboardInterrupt:
         send_stop()
     finally:
+        screen_off()
         termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, old_attrs)
         shutdown()
     return 0
