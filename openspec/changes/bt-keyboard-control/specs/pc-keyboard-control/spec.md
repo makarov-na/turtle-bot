@@ -78,7 +78,7 @@ While connected and running, the application SHALL resend the current command at
 
 ### Requirement: Graceful shutdown stops the robot
 
-When the application exits, whether via `q`, Ctrl+C, or an error on the serial port, it SHALL send a final `set_speed 0.0 0.0` before closing the connection so the robot does not continue moving with the last non-zero command.
+When the application exits, whether via `q`, Ctrl+C, or the reconnection attempts after a link loss being exhausted, it SHALL send a final `set_speed 0.0 0.0` before closing the connection so the robot does not continue moving with the last non-zero command.
 
 #### Scenario: Quit via key sends stop
 
@@ -89,6 +89,39 @@ When the application exits, whether via `q`, Ctrl+C, or an error on the serial p
 
 - **WHEN** the user interrupts the application with Ctrl+C
 - **THEN** the application sends `set_speed 0.0 0.0` and restores the terminal
+
+#### Scenario: Exit after failed reconnect sends stop
+
+- **WHEN** a link loss cannot be repaired within the reconnection attempts
+- **THEN** the application sends `set_speed 0.0 0.0` and exits with an error message
+
+### Requirement: Auto-reconnect on lost link
+
+While running, if the connection to the robot is lost (for example a Bluetooth RFCOMM link that drops), the application SHALL automatically reconnect to the same port and resume sending the current command, keeping the current linear and angular components. It SHALL repeat the reconnection at most 5 times with a 0.5 s pause between attempts; if all attempts fail, the application SHALL exit per the graceful-shutdown requirement. A link loss SHALL not reset the user's held command.
+
+#### Scenario: Link drop while driving resumes
+
+- **WHEN** the connection drops while a non-zero command is held
+- **THEN** the application reconnects and continues sending the same command without the user having to rebuild it from zero
+
+#### Scenario: Unrecoverable link loss exits cleanly
+
+- **WHEN** reconnection attempts all fail
+- **THEN** the application prints a readable error message and exits with a final stop command
+
+### Requirement: Incoming telemetry is drained while running
+
+While connected, the application SHALL continuously read and discard incoming bytes from the serial port (the bot's keepalive acknowledgements). This keeps the terminal input buffer from filling up, which would otherwise stall the RFCOMM flow control and break the channel over time.
+
+#### Scenario: Acknowledgements are drained
+
+- **WHEN** the bot sends `ack ...` lines every ~200 ms while the application is connected
+- **THEN** the application reads them promptly so the input buffer does not grow without bound
+
+#### Scenario: Link closure mid-run is detected via read errors
+
+- **WHEN** the channel closes while driving and a read or write on the port raises an I/O error (for example `EIO` on a dropped RFCOMM link)
+- **THEN** the application treats it as a link loss and enters the auto-reconnect flow; an empty read on an idle tty (a no-op return with no data, which is normal on a `VMIN=0` port) is ignored and does not count as a closure
 
 ### Requirement: Serial port is supplied as a launch argument
 

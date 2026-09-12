@@ -2,3 +2,5 @@
 .idea/
 *.FCBak
 .opencode/
+*__pycache__
+

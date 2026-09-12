@@ -17,6 +17,13 @@
 //   ВНИМАНИЕ: при перепрошивке через USB отключать HC-06 (загрузчик
 //   использует D0/D1). SoftwareSerial не используется — его PCINT-алиасы
 //   конфликтуют с ISR(PCINT1_vect) энкодеров на ATmega328P.
+//
+// Протокол управления по каналу (текст, \n — конец команды):
+//   set_speed <linear_speed> <angular_speed>
+//     linear_speed  — мм/с, любой знак
+//     angular_speed — рад/с, любой знак
+// Команды принимаются всегда. Watchdog: если команда не получена более
+// WATCHDOG_TIMEOUT_MS, бот выполняет stop() до прихода новой команды.
 
 #define PIN_IN1_R  2
 #define PIN_IN2_R  3
@@ -41,9 +48,7 @@ const uint32_t RAMP_DURATION_MS = 1000;
 const uint32_t BRAKE_DURATION_MS = 300;
 const uint32_t PID_PERIOD_MS = 10;
 const uint16_t MIN_TICK_US = 50;
-
-const float TEST_SPEED_MM_S = 250.0f;
-const uint32_t TEST_RUN_TIME_MS = 9000;
+const uint32_t WATCHDOG_TIMEOUT_MS = 1000;
 
 const uint16_t ENCODER_CPR  = 11;
 const uint8_t  GEAR_RATIO   = 56;
@@ -158,7 +163,16 @@ Wheel wheels[2] = {
 DriveState driveState = STATE_STOPPED;
 uint32_t brakeStartMs = 0;
 uint32_t lastControlMs = 0;
-uint32_t lastBtSendMs = 0;
+
+const uint8_t CMD_BUF_SIZE = 40;
+char cmdBuf[CMD_BUF_SIZE];
+uint8_t cmdLen = 0;
+bool cmdOverflow = false;
+
+uint32_t lastCommandMs = 0;
+bool watchdogTripped = true;
+
+uint32_t cmdCounter = 0;
 
 static uint8_t prevEncState[2] = {0, 0};
 static uint32_t lastTickMicros[2] = {0, 0};
@@ -232,6 +246,61 @@ void controlLoop() {
   }
 }
 
+void handleCommand(char *buf) {
+  // Парсим вручную: scanf-вариант из avr-libc по умолчанию не умеет %f
+  // (нужна принудительная линковка libscanf_flt), а strtof доступен всегда.
+  char *saveptr = nullptr;
+  char *tok = strtok_r(buf, " ", &saveptr);
+  if (!tok || strcmp(tok, "set_speed") != 0) {
+    return;
+  }
+  char *vTok = strtok_r(nullptr, " ", &saveptr);
+  char *wTok = strtok_r(nullptr, " ", &saveptr);
+  char *extra = strtok_r(nullptr, " ", &saveptr);
+  if (!vTok || !wTok || extra != nullptr) {
+    return;
+  }
+  char *endV = nullptr;
+  char *endW = nullptr;
+  float v = (float)strtod(vTok, &endV);
+  float w = (float)strtod(wTok, &endW);
+  if (endV == vTok || endW == wTok || *endV != '\0' || *endW != '\0') {
+    return;
+  }
+  lastCommandMs = millis();
+  watchdogTripped = false;
+  set_speed(v, w);
+
+  // Keepalive-телеметрия: непрерывный двунаправленный трафик удерживает
+  // RFCOMM-линк HC-06 (проверено: ≥60 с против обрыва ~5.2 с на
+  // одностороннем трафике). Ответ на каждую команду создаёт его.
+  cmdCounter++;
+  Serial.print("ack ");
+  Serial.print(cmdCounter);
+  Serial.print(" ");
+  Serial.print(v);
+  Serial.print(" ");
+  Serial.println(w);
+}
+
+void processSerial() {
+  while (Serial.available() > 0) {
+    char c = (char)Serial.read();
+    if (c == '\n' || c == '\r') {
+      if (cmdLen > 0 && !cmdOverflow) {
+        cmdBuf[cmdLen] = '\0';
+        handleCommand(cmdBuf);
+        cmdLen = 0;
+        cmdOverflow = false;
+      }
+    } else if (cmdLen < CMD_BUF_SIZE - 1) {
+      cmdBuf[cmdLen++] = c;
+    } else {
+      cmdOverflow = true;
+    }
+  }
+}
+
 void setup() {
   pinMode(PIN_ENA_R, OUTPUT);
   pinMode(PIN_IN1_R, OUTPUT);
@@ -257,9 +326,6 @@ void setup() {
 }
 
 void loop() {
-  static uint32_t demoStartMs = 0;
-  static bool demoStarted = false;
-  static bool demoStopped = false;
   uint32_t now = millis();
 
   if (driveState == STATE_BRAKING && now - brakeStartMs >= BRAKE_DURATION_MS) {
@@ -272,18 +338,10 @@ void loop() {
     controlLoop();
   }
 
-  if (!demoStarted) {
-    demoStarted = true;
-    demoStartMs = now;
-    set_speed(TEST_SPEED_MM_S, 0.0f);
-  }
-  if (!demoStopped && now - demoStartMs >= TEST_RUN_TIME_MS) {
-    demoStopped = true;
-    power_stop();
-  }
+  processSerial();
 
-  if (now - lastBtSendMs >= 1000) {
-    lastBtSendMs = now;
-    Serial.println("hello PC from ARDU");
+  if (!watchdogTripped && now - lastCommandMs > WATCHDOG_TIMEOUT_MS) {
+    watchdogTripped = true;
+    stop();
   }
 }
