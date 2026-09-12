@@ -13,6 +13,7 @@
     Down  — линейная скорость -10% (ниже 0 — задний ход)
     Left  — угловая скорость +10%
     Right — угловая скорость -10%
+    Space — пауза: мгновенный стоп и заморозка телеметрии; ещё раз — продолжить
     q     — выход (перед выходом боту уходит set_speed 0.0 0.0)
 
 Интерфейс — полноэкранная панель (alternate screen buffer): статус с
@@ -56,6 +57,8 @@ KEY_DOWN = (b"\x1b[B", b"\x1bOB")
 KEY_RIGHT = (b"\x1b[C", b"\x1bOC")
 KEY_LEFT = (b"\x1b[D", b"\x1bOD")
 
+SPACE = b" "
+
 STOP_COMMAND = "set_speed 0.0 0.0\n"
 
 RECONNECT_ATTEMPTS = 5
@@ -86,6 +89,12 @@ def send_command(fd, linear_pct, angular_pct):
         write_all(fd, format_command(linear_pct, angular_pct).encode())
     except OSError as exc:
         raise LinkLost() from exc
+
+
+def outgoing_speed(state):
+    if state.get("paused"):
+        return 0.0, 0.0
+    return state["linear"], state["angular"]
 
 
 class LinkLost(Exception):
@@ -308,7 +317,7 @@ def clamp(value):
     return max(CLAMP_MIN, min(CLAMP_MAX, value))
 
 
-FOOTER_HINTS = "lin: ↑/↓ · ang: ←/→ · q — выход"
+FOOTER_HINTS = "lin: ↑/↓ · ang: ←/→ · Space — пауза · q — выход"
 
 
 def draw_panel(ring, linear_pct, angular_pct, footer):
@@ -318,15 +327,15 @@ def draw_panel(ring, linear_pct, angular_pct, footer):
 
 
 def run(fd, state, ring):
-    linear_pct = state["linear"]
-    angular_pct = state["angular"]
+    paused = state["paused"]
     last_sent = 0.0
     rx = b""
-    draw_panel(ring, linear_pct, angular_pct, FOOTER_HINTS)
+    draw_panel(ring, state["linear"], state["angular"], FOOTER_HINTS)
     while True:
         now = time.monotonic()
+        out_linear, out_angular = outgoing_speed(state)
         if now - last_sent >= HEARTBEAT_MS / 1000.0:
-            send_command(fd, linear_pct, angular_pct)
+            send_command(fd, out_linear, out_angular)
             last_sent = now
 
         timeout = max(0.0, last_sent + HEARTBEAT_MS / 1000.0 - now)
@@ -353,34 +362,40 @@ def run(fd, state, ring):
                 pass
             except OSError as exc:
                 raise LinkLost() from exc
-            if new_acks:
-                draw_panel(ring, linear_pct, angular_pct, FOOTER_HINTS)
+            if new_acks and not paused:
+                draw_panel(ring, state["linear"], state["angular"], FOOTER_HINTS)
 
         if sys.stdin in r:
             key = read_key(sys.stdin.fileno())
-            changed = True
-            if key in KEY_UP:
-                linear_pct = clamp(linear_pct + STEP_PCT)
-            elif key in KEY_DOWN:
-                linear_pct = clamp(linear_pct - STEP_PCT)
-            elif key in KEY_LEFT:
-                angular_pct = clamp(angular_pct + STEP_PCT)
-            elif key in KEY_RIGHT:
-                angular_pct = clamp(angular_pct - STEP_PCT)
+            if key == SPACE:
+                paused = not paused
+                state["paused"] = paused
+                if paused:
+                    send_command(fd, 0.0, 0.0)
+                else:
+                    send_command(fd, state["linear"], state["angular"])
+                    draw_panel(ring, state["linear"], state["angular"], FOOTER_HINTS)
+                last_sent = time.monotonic()
             elif key in (b"q", b"Q", b"\x03"):
                 # \x03 = Ctrl+C: в raw-режиме терминала ISIG отключён, поэтому
                 # Ctrl+C приходит как обычный байт 0x03, а не как SIGINT.
-                state["linear"] = linear_pct
-                state["angular"] = angular_pct
                 return
-            else:
-                changed = False
-            if changed:
-                state["linear"] = linear_pct
-                state["angular"] = angular_pct
-                send_command(fd, linear_pct, angular_pct)
-                last_sent = time.monotonic()
-                draw_panel(ring, linear_pct, angular_pct, FOOTER_HINTS)
+            elif not paused:
+                changed = True
+                if key in KEY_UP:
+                    state["linear"] = clamp(state["linear"] + STEP_PCT)
+                elif key in KEY_DOWN:
+                    state["linear"] = clamp(state["linear"] - STEP_PCT)
+                elif key in KEY_LEFT:
+                    state["angular"] = clamp(state["angular"] + STEP_PCT)
+                elif key in KEY_RIGHT:
+                    state["angular"] = clamp(state["angular"] - STEP_PCT)
+                else:
+                    changed = False
+                if changed:
+                    send_command(fd, state["linear"], state["angular"])
+                    last_sent = time.monotonic()
+                    draw_panel(ring, state["linear"], state["angular"], FOOTER_HINTS)
 
 
 def main():
@@ -395,7 +410,7 @@ def main():
         return 1
 
     old_attrs = termios.tcgetattr(sys.stdin.fileno())
-    state = {"linear": 0.0, "angular": 0.0}
+    state = {"linear": 0.0, "angular": 0.0, "paused": False}
     ring = TelemetryRing()
     try:
         tty.setraw(sys.stdin.fileno())
@@ -407,7 +422,7 @@ def main():
                 draw_panel(ring, state["linear"], state["angular"],
                            "Подключение к {} ...".format(args.port))
                 try:
-                    fd = open_serial(args.port, probe=format_command(state["linear"], state["angular"]))
+                    fd = open_serial(args.port, probe=format_command(*outgoing_speed(state)))
                 except TimeoutError:
                     draw_panel(ring, state["linear"], state["angular"],
                                "Ошибка: нет связи с ботом через {}.\n"
@@ -437,7 +452,7 @@ def main():
                 for _ in range(RECONNECT_ATTEMPTS):
                     time.sleep(RECONNECT_DELAY_S)
                     try:
-                        fd = open_serial(args.port, probe=format_command(state["linear"], state["angular"]))
+                        fd = open_serial(args.port, probe=format_command(*outgoing_speed(state)))
                         reconnected = True
                         break
                     except (TimeoutError, OSError):
