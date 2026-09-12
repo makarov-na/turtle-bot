@@ -19,6 +19,11 @@ The firmware SHALL read incoming lines from the Bluetooth channel via Hardware S
 - **WHEN** the line `set_speed 120 1.2` arrives
 - **THEN** the robot drives forward while turning, per the differential drive model
 
+#### Scenario: Zero-speed command actively brakes
+
+- **WHEN** the line `set_speed 0.0 0.0` arrives while the robot is moving
+- **THEN** the robot executes an active braking stop (power_stop) and resets the PID integral, so it does not keep drifting forward from accumulated integrator windup
+
 #### Scenario: Malformed line is ignored
 
 - **WHEN** a line such as `set_speed abc def` or `stop_now` arrives

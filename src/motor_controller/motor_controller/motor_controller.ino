@@ -57,13 +57,28 @@ const uint32_t TICKS_PER_WHEEL_REV = ENCODER_CPR * 4UL * GEAR_RATIO;
 const float PID_KP = 1.5f;
 const float PID_KI = 0.2f;
 const float PID_KD = 0.0f;
-const float PID_INTEGRAL_LIMIT = 200.0f;
+const float PID_INTEGRAL_LIMIT = 500.0f;
 
+// Прямая связь: компенсирует усилие, нужное мосту для поддержания скорости.
+// Полная шкала ШИМ 255 ~= V_MAX мм/с, поэтому коэффициент 255/V_MAX≈0.85.
+// Без неё на низких целях (напр. 30 мм/с) контур может выдать максимум
+// Kp·30 + Ki·I_limit ≈ 45+40 = 85 ШИМ, а редуктор 56:1 трогается только
+// c ~60 ШИМ — бот "жужжит" и не едет. FF добавляет ~0.85·setpoint сразу.
+const float PID_FF = 255.0f / V_MAX_MM_S;
+
+// Диагноз (контролируемый тест 2026-09-12): при вращении колеса "вперёд"
+// руками оба энкодера показывали ОТРИЦАТЕЛЬНУЮ скорость (mL=mR=-4..-500
+// мм/с) — контур работал в положительную обратную связь (моторы вылетали
+// в oL=oR=255 в ту же сторону). motorSign(-1/+1) калиброваны под старую
+// разводку D8-D11; после переезда на Port C (A0-A3) каналы A/B на обоих
+// колёсах обменялись, что инвертирует подсчёт. Фикс: инвертировать таблицу
+// (эквивалентно смене мест проводов A/B на обоих энкодерах) — это флипнет
+// знак СЧЁТА, не тронув motorSign и направление моторов.
 static const int8_t QUAD_TABLE[16] = {
-    0, -1, 1, 0,
-    1, 0, 0, -1,
+    0, 1, -1, 0,
     -1, 0, 0, 1,
-    0, 1, -1, 0
+    1, 0, 0, -1,
+    0, -1, 1, 0
 };
 
 enum WheelId { WHEEL_LEFT = 0, WHEEL_RIGHT = 1 };
@@ -91,6 +106,7 @@ struct Wheel {
 
   float integral = 0.0f;
   float prevError = 0.0f;
+  float lastOut = 0.0f;
 
   void setTarget(float target) {
     rampFrom = rampedLinear;
@@ -125,8 +141,16 @@ struct Wheel {
     integral = constrain(integral, -PID_INTEGRAL_LIMIT, PID_INTEGRAL_LIMIT);
     float derivative = dt > 0.0f ? (error - prevError) / dt : 0.0f;
     prevError = error;
-    float out = PID_KP * error + PID_KI * integral + PID_KD * derivative;
+    float out = PID_FF * setpoint
+              + PID_KP * error
+              + PID_KI * integral
+              + PID_KD * derivative;
     return constrain(out, -255.0f, 255.0f);
+  }
+
+  void resetPid() {
+    integral = 0.0f;
+    prevError = 0.0f;
   }
 
   void applyPwm(float pwmCmd) {
@@ -218,11 +242,15 @@ void stop() {
   wheels[WHEEL_RIGHT].setTarget(0.0f);
   wheels[WHEEL_LEFT].coast();
   wheels[WHEEL_RIGHT].coast();
+  wheels[WHEEL_LEFT].resetPid();
+  wheels[WHEEL_RIGHT].resetPid();
 }
 
 void power_stop() {
   wheels[WHEEL_LEFT].setTarget(0.0f);
   wheels[WHEEL_RIGHT].setTarget(0.0f);
+  wheels[WHEEL_LEFT].resetPid();
+  wheels[WHEEL_RIGHT].resetPid();
   driveState = STATE_BRAKING;
   brakeStartMs = millis();
   wheels[WHEEL_LEFT].brake();
@@ -231,17 +259,30 @@ void power_stop() {
 
 void controlLoop() {
   uint32_t now = millis();
-  if (now - lastControlMs < PID_PERIOD_MS) {
+  uint32_t gap = now - lastControlMs;
+  if (gap < PID_PERIOD_MS) {
     return;
   }
-  float dt = (float)(now - lastControlMs) / 1000.0f;
-  lastControlMs = now;
+  // Если контур долго не работал (пауза, торможение, watchdog), первая
+  // итерация после возобновления не должна "видеть" накопленное с тех пор:
+  // иначе dt и дельта тиков дадут гигантский фейковый интеграл/скорость
+  // (наблюдалось iL=±296 и "колёса сами крутятся после паузы"). Сбрасываем
+  // точку отсчёта и берём штатные 10 мс.
+  if (gap > 200UL) {
+    for (int w = 0; w < 2; w++) {
+      wheels[w].prevTicks = wheels[w].ticks;
+    }
+    gap = PID_PERIOD_MS;
+  }
+  float dt = (float)gap / 1000.0f;
+  lastControlMs = now + (gap - PID_PERIOD_MS);
 
   for (int w = 0; w < 2; w++) {
     Wheel &wh = wheels[w];
     wh.updateRamp(now);
     wh.measureSpeed(dt);
     float out = wh.pidUpdate(wh.rampedLinear, wh.measuredLinear, dt);
+    wh.lastOut = out;
     wh.applyPwm(out);
   }
 }
@@ -269,7 +310,14 @@ void handleCommand(char *buf) {
   }
   lastCommandMs = millis();
   watchdogTripped = false;
-  set_speed(v, w);
+  if (fabsf(v) < 0.05f && fabsf(w) < 0.05f) {
+    // 0-команда: резкая остановка + сброс ПИД. Без торможения integral
+    // windup после разгона оставляет бота едущим ~ V_MAX*Ki/Kp·I_limit ≈
+    // 27 мм/с: ошибка(0−measured)+Ki·I = 0 достигается при measured>0.
+    power_stop();
+  } else {
+    set_speed(v, w);
+  }
 
   // Keepalive-телеметрия: непрерывный двунаправленный трафик удерживает
   // RFCOMM-линк HC-06 (проверено: ≥60 с против обрыва ~5.2 с на
@@ -280,7 +328,22 @@ void handleCommand(char *buf) {
   Serial.print(" ");
   Serial.print(v);
   Serial.print(" ");
-  Serial.println(w);
+  Serial.print(w);
+  // Диагностика: измеренная скорость, выход ШИМ и интеграл каждого колеса.
+  // mL/mR = measured, oL/oR = pid out, iL/iR = integral.
+  Serial.print(" mL=");
+  Serial.print(wheels[WHEEL_LEFT].measuredLinear);
+  Serial.print(" mR=");
+  Serial.print(wheels[WHEEL_RIGHT].measuredLinear);
+  Serial.print(" oL=");
+  Serial.print(wheels[WHEEL_LEFT].lastOut);
+  Serial.print(" oR=");
+  Serial.print(wheels[WHEEL_RIGHT].lastOut);
+  Serial.print(" iL=");
+  Serial.print(wheels[WHEEL_LEFT].integral);
+  Serial.print(" iR=");
+  Serial.print(wheels[WHEEL_RIGHT].integral);
+  Serial.println();
 }
 
 void processSerial() {
