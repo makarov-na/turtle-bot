@@ -213,7 +213,9 @@ def run(fd, state):
                 angular_pct = clamp(angular_pct + STEP_PCT)
             elif key in KEY_RIGHT:
                 angular_pct = clamp(angular_pct - STEP_PCT)
-            elif key in (b"q", b"Q"):
+            elif key in (b"q", b"Q", b"\x03"):
+                # \x03 = Ctrl+C: в raw-режиме терминала ISIG отключён, поэтому
+                # Ctrl+C приходит как обычный байт 0x03, а не как SIGINT.
                 state["linear"] = linear_pct
                 state["angular"] = angular_pct
                 return
