@@ -2,9 +2,7 @@
 
 ## Purpose
 Консольное Python-приложение на ПК для управления роботом по Bluetooth: чтение стрелок в raw-режиме, дискретные инкременты ±10%, heartbeat 200 мс, graceful shutdown и автореконнект при обрыве линка.
-
 ## Requirements
-
 ### Requirement: Console app reads arrow keys without Enter
 
 The application SHALL run a console (terminal) session in raw mode and SHALL recognize the arrow keys Up, Down, Left, Right, and the exit key `q`, reacting to a key press immediately without requiring the Enter key. Terminal contents and behavior SHALL be restored when the application exits.
@@ -149,12 +147,12 @@ The application SHALL display the current command with both the percentage of th
 
 ### Requirement: Live telemetry dashboard
 
-While connected, the application SHALL run in a full-screen mode using the terminal alternate screen buffer and SHALL continuously render a telemetry dashboard: a status line on top, below it a table of the **20 most recent** acknowledgement lines (newest row on top), and a footer with control hints. The live dashboard SHALL be updated on each new acknowledgement (approximately every 200 ms). The most recent row SHALL be visually highlighted. All internal messages (connection status, link-loss notices, hints) SHALL be rendered inside the dashboard, not written over it. When the application exits, it SHALL leave the alternate screen buffer and restore the normal terminal screen.
+While connected, the application SHALL run in a full-screen mode using the terminal alternate screen buffer and SHALL continuously render a telemetry dashboard: a status line on top, below it a table of the **50 most recent** acknowledgement lines (newest row on top), and a footer with control hints. The live dashboard SHALL be updated on each new acknowledgement (approximately every 200 ms). The most recent row SHALL be visually highlighted. All internal messages (connection status, link-loss notices, hints) SHALL be rendered inside the dashboard, not written over it. When the application exits, it SHALL leave the alternate screen buffer and restore the normal terminal screen.
 
-#### Scenario: Dashboard shows last 20 acknowledgements with newest on top
+#### Scenario: Dashboard shows last 50 acknowledgements with newest on top
 
-- **WHEN** more than 20 acknowledgements have arrived
-- **THEN** the table shows exactly the 20 most recent ones, with the newest row at the top of the table
+- **WHEN** more than 50 acknowledgements have arrived
+- **THEN** the table shows exactly the 50 most recent ones, with the newest row at the top of the table
 
 #### Scenario: Latest row is highlighted
 
@@ -225,7 +223,7 @@ The application SHALL accept the serial port device as its single command-line a
 
 ### Requirement: Панель замораживается во время паузы
 
-Во время паузы приложение SHALL NOT перерисовывать панель в ответ на входящие подтверждения или клавиши-стрелки: статусная строка и таблица из 20 строк телеметрии SHALL оставаться ровно такими, какими были в момент паузы. Входящие строки подтверждения SHALL по-прежнему читаться, парситься и помещаться в кольцо телеметрии, чтобы таблица сразу после resume показывала свежее состояние.
+Во время паузы приложение SHALL NOT перерисовывать панель в ответ на входящие подтверждения или клавиши-стрелки: статусная строка и таблица из 50 строк телеметрии SHALL оставаться ровно такими, какими были в момент паузы. Входящие строки подтверждения SHALL по-прежнему читаться, парситься и помещаться в кольцо телеметрии, чтобы таблица сразу после resume показывала свежее состояние.
 
 #### Scenario: Приход ack на паузе не перерисовывает панель
 
@@ -273,3 +271,4 @@ The application SHALL accept the serial port device as its single command-line a
 
 - **WHEN** пользователь нажимает `q` или Ctrl+C во время паузы
 - **THEN** приложение отправляет финальную команду остановки и восстанавливает терминал
+
