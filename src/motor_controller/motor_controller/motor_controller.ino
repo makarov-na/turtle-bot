@@ -329,8 +329,8 @@ void handleCommand(char *buf) {
   Serial.print(v);
   Serial.print(" ");
   Serial.print(w);
-  // Диагностика: измеренная скорость, выход ШИМ и интеграл каждого колеса.
-  // mL/mR = measured, oL/oR = pid out, iL/iR = integral.
+  // Диагностика: измеренная скорость, ШИМ и интеграл каждого колеса.
+  // mL/mR = изм. мм/с, oL/oR = ШИМ ±255, iL/iR = интеграл.
   Serial.print(" mL=");
   Serial.print(wheels[WHEEL_LEFT].measuredLinear);
   Serial.print(" mR=");
