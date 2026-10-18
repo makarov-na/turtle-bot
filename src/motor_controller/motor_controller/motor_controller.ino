@@ -44,7 +44,7 @@ const float WHEELBASE_MM = 185.0f;
 const float V_MAX_MM_S = 300.0f;
 const float OMEGA_MAX_RAD_S = 2.0f * V_MAX_MM_S / WHEELBASE_MM;
 
-const uint32_t RAMP_DURATION_MS = 1000;
+const uint32_t RAMP_DURATION_MS = 1;
 const uint32_t BRAKE_DURATION_MS = 300;
 const uint32_t PID_PERIOD_MS = 10;
 const uint16_t MIN_TICK_US = 50;
