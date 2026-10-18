@@ -50,6 +50,11 @@ const uint32_t PID_PERIOD_MS = 10;
 const uint16_t MIN_TICK_US = 50;
 const uint32_t WATCHDOG_TIMEOUT_MS = 1000;
 
+// Период периодической телеметрии. Печать не привязана к приходу команды:
+// иначе накопившиеся в RX-буфере команды печатаются пачкой и не дают
+// controlLoop() выполниться (см. design.md).
+const uint32_t TELEMETRY_PERIOD_MS = 200;
+
 const uint16_t ENCODER_CPR  = 11;
 const uint8_t  GEAR_RATIO   = 56;
 const uint32_t TICKS_PER_WHEEL_REV = ENCODER_CPR * 4UL * GEAR_RATIO;
@@ -198,6 +203,12 @@ bool watchdogTripped = true;
 
 uint32_t cmdCounter = 0;
 
+// Последняя применённая уставка — эхо колонок v/w периодической телеметрии.
+// До первой команды — нули.
+float lastLinear = 0.0f;
+float lastAngular = 0.0f;
+uint32_t lastTelemetryMs = 0;
+
 static uint8_t prevEncState[2] = {0, 0};
 static uint32_t lastTickMicros[2] = {0, 0};
 
@@ -229,6 +240,18 @@ void set_speed(float linearSpeed, float angularSpeed) {
     float k = V_MAX_MM_S / maxAbs;
     vLeft *= k;
     vRight *= k;
+  }
+
+  // Вход в режим управления после паузы: перебазировать опорную точку контура,
+  // чтобы первая итерация не увидела накопленные за паузу тики и время.
+  // Команда поверх уже идущего STATE_RUN (heartbeat) НЕ перебазирует: иначе
+  // таймер контура сбрасывался бы каждые 200 мс и controlLoop() не успевал бы
+  // отработать.
+  if (driveState != STATE_RUN) {
+    lastControlMs = millis();
+    for (int w = 0; w < 2; w++) {
+      wheels[w].prevTicks = wheels[w].ticks;
+    }
   }
 
   driveState = STATE_RUN;
@@ -263,19 +286,16 @@ void controlLoop() {
   if (gap < PID_PERIOD_MS) {
     return;
   }
-  // Если контур долго не работал (пауза, торможение, watchdog), первая
-  // итерация после возобновления не должна "видеть" накопленное с тех пор:
-  // иначе dt и дельта тиков дадут гигантский фейковый интеграл/скорость
-  // (наблюдалось iL=±296 и "колёса сами крутятся после паузы"). Сбрасываем
-  // точку отсчёта и берём штатные 10 мс.
-  if (gap > 200UL) {
-    for (int w = 0; w < 2; w++) {
-      wheels[w].prevTicks = wheels[w].ticks;
-    }
-    gap = PID_PERIOD_MS;
-  }
+  // Длинная итерация во время активного управления (например, блокирующая
+  // печать кадра телеметрии ~78 мс) — это НЕ пауза: колесо всё это время
+  // вращалось, дельта тиков настоящая. Меряем по реальному dt и ничего не
+  // подменяем нулём. Настоящая пауза (торможение/останов/watchdog) видна по
+  // смене driveState и обрабатывается перебазированием в set_speed().
   float dt = (float)gap / 1000.0f;
-  lastControlMs = now + (gap - PID_PERIOD_MS);
+  // Дедлайн следующей итерации — от текущего момента, без захода в будущее:
+  // иначе uint32_t-разность на следующей итерации переполняется и даёт
+  // ложный огромный gap (и подмен нулём через старую ветку gap > 200UL).
+  lastControlMs = now;
 
   for (int w = 0; w < 2; w++) {
     Wheel &wh = wheels[w];
@@ -285,6 +305,34 @@ void controlLoop() {
     wh.lastOut = out;
     wh.applyPwm(out);
   }
+}
+
+// Периодическая телеметрия: непрерывный двунаправленный трафик удерживает
+// RFCOMM-линк HC-06 (проверено: ≥60 с против обрыва ~5.2 с на одностороннем
+// трафике). Печать идёт по таймеру из loop(), а не в ответ на команду.
+// v/w — последняя применённая уставка, n — счётчик обработанных команд.
+void sendTelemetry() {
+  Serial.print("ack ");
+  Serial.print(cmdCounter);
+  Serial.print(" ");
+  Serial.print(lastLinear);
+  Serial.print(" ");
+  Serial.print(lastAngular);
+  // Диагностика: измеренная скорость, ШИМ и интеграл каждого колеса.
+  // mL/mR = изм. мм/с, oL/oR = ШИМ ±255, iL/iR = интеграл.
+  Serial.print(" mL=");
+  Serial.print(wheels[WHEEL_LEFT].measuredLinear);
+  Serial.print(" mR=");
+  Serial.print(wheels[WHEEL_RIGHT].measuredLinear);
+  Serial.print(" oL=");
+  Serial.print(wheels[WHEEL_LEFT].lastOut);
+  Serial.print(" oR=");
+  Serial.print(wheels[WHEEL_RIGHT].lastOut);
+  Serial.print(" iL=");
+  Serial.print(wheels[WHEEL_LEFT].integral);
+  Serial.print(" iR=");
+  Serial.print(wheels[WHEEL_RIGHT].integral);
+  Serial.println();
 }
 
 void handleCommand(char *buf) {
@@ -319,31 +367,11 @@ void handleCommand(char *buf) {
     set_speed(v, w);
   }
 
-  // Keepalive-телеметрия: непрерывный двунаправленный трафик удерживает
-  // RFCOMM-линк HC-06 (проверено: ≥60 с против обрыва ~5.2 с на
-  // одностороннем трафике). Ответ на каждую команду создаёт его.
+  // Команда не печатает телеметрию: кадр отправляется по таймеру из loop()
+  // (sendTelemetry), чтобы печать не зависела от накопления команд в RX.
   cmdCounter++;
-  Serial.print("ack ");
-  Serial.print(cmdCounter);
-  Serial.print(" ");
-  Serial.print(v);
-  Serial.print(" ");
-  Serial.print(w);
-  // Диагностика: измеренная скорость, ШИМ и интеграл каждого колеса.
-  // mL/mR = изм. мм/с, oL/oR = ШИМ ±255, iL/iR = интеграл.
-  Serial.print(" mL=");
-  Serial.print(wheels[WHEEL_LEFT].measuredLinear);
-  Serial.print(" mR=");
-  Serial.print(wheels[WHEEL_RIGHT].measuredLinear);
-  Serial.print(" oL=");
-  Serial.print(wheels[WHEEL_LEFT].lastOut);
-  Serial.print(" oR=");
-  Serial.print(wheels[WHEEL_RIGHT].lastOut);
-  Serial.print(" iL=");
-  Serial.print(wheels[WHEEL_LEFT].integral);
-  Serial.print(" iR=");
-  Serial.print(wheels[WHEEL_RIGHT].integral);
-  Serial.println();
+  lastLinear = v;
+  lastAngular = w;
 }
 
 void processSerial() {
@@ -402,6 +430,11 @@ void loop() {
   }
 
   processSerial();
+
+  if (now - lastTelemetryMs >= TELEMETRY_PERIOD_MS) {
+    sendTelemetry();
+    lastTelemetryMs = now;
+  }
 
   if (!watchdogTripped && now - lastCommandMs > WATCHDOG_TIMEOUT_MS) {
     watchdogTripped = true;
