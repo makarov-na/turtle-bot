@@ -71,6 +71,12 @@ const float PID_INTEGRAL_LIMIT = 500.0f;
 // c ~60 ШИМ — бот "жужжит" и не едет. FF добавляет ~0.85·setpoint сразу.
 const float PID_FF = 255.0f / V_MAX_MM_S;
 
+// Постоянная времени сглаживания измеренной скорости (EMA). При периоде
+// контура 10 мс один тик энкодера — это ~8.5 мм/с, а Kp=1.5 превращает
+// квантование в ±10 ШИМ прямо на моторе (видимая неравномерность). EMA с
+// τ=60 мс режет шум примерно в 3.6 раза, оставляя контур достаточно быстрым.
+const float SPEED_FILTER_TAU_S = 0.06f;
+
 // Диагноз (контролируемый тест 2026-09-12): при вращении колеса "вперёд"
 // руками оба энкодера показывали ОТРИЦАТЕЛЬНУЮ скорость (mL=mR=-4..-500
 // мм/с) — контур работал в положительную обратную связь (моторы вылетали
@@ -112,6 +118,7 @@ struct Wheel {
   float integral = 0.0f;
   float prevError = 0.0f;
   float lastOut = 0.0f;
+  bool speedFilterInit = false;
 
   void setTarget(float target) {
     rampFrom = rampedLinear;
@@ -137,7 +144,16 @@ struct Wheel {
     int32_t delta = ticks - prevTicks;
     prevTicks = ticks;
     float mmPerTick = PI * WHEEL_DIAMETER_MM / (float)TICKS_PER_WHEEL_REV;
-    measuredLinear = (float)delta * mmPerTick * (float)motorSign / dtSec;
+    float raw = (float)delta * mmPerTick * (float)motorSign / dtSec;
+    // EMA: единичный отсчёт за такт квантуется шагом ~8.5 мм/с, и ПИД с
+    // Kp=1.5 гоняется за этим шумом. Сглаживаем, чтобы ШИМ не дрожал.
+    if (!speedFilterInit) {
+      measuredLinear = raw;
+      speedFilterInit = true;
+    } else {
+      float alpha = dtSec / (SPEED_FILTER_TAU_S + dtSec);
+      measuredLinear += alpha * (raw - measuredLinear);
+    }
   }
 
   float pidUpdate(float setpoint, float feedback, float dt) {
@@ -156,6 +172,7 @@ struct Wheel {
   void resetPid() {
     integral = 0.0f;
     prevError = 0.0f;
+    speedFilterInit = false;
   }
 
   void applyPwm(float pwmCmd) {
@@ -251,6 +268,7 @@ void set_speed(float linearSpeed, float angularSpeed) {
     lastControlMs = millis();
     for (int w = 0; w < 2; w++) {
       wheels[w].prevTicks = wheels[w].ticks;
+      wheels[w].speedFilterInit = false;
     }
   }
 
@@ -436,7 +454,11 @@ void loop() {
     lastTelemetryMs = now;
   }
 
-  if (!watchdogTripped && now - lastCommandMs > WATCHDOG_TIMEOUT_MS) {
+  // Считаем таймаут по свежему millis(): lastCommandMs обновляется в
+  // processSerial() позже, чем снят `now`, поэтому беззнаковая разность
+  // `now - lastCommandMs` могла переполниться (0xFFFFFFFF) и дать ложный stop().
+  if (!watchdogTripped &&
+      (uint32_t)(millis() - lastCommandMs) > WATCHDOG_TIMEOUT_MS) {
     watchdogTripped = true;
     stop();
   }
