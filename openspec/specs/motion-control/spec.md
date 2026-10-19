@@ -1,7 +1,7 @@
 # Motion Control
 
 ## Purpose
-Define the body-frame velocity command surface, differential drive kinematics, speed limiting, acceleration ramping, and closed-loop per-wheel speed control for the robot's motor controller firmware.
+Define the body-frame velocity command surface, differential drive kinematics, speed limiting, and closed-loop per-wheel speed control for the robot's motor controller firmware.
 ## Requirements
 ### Requirement: Set body-frame velocity
 The motion controller SHALL provide a `set_speed(linear_speed, angular_speed)` command where `linear_speed` is the linear velocity of the midpoint of the wheel axis in mm/s and `angular_speed` is the angular velocity in rad/s. Positive angular velocity SHALL mean counter-clockwise rotation viewed from above; negative SHALL mean clockwise. The controller SHALL translate a positive linear command into forward motion of the robot, accounting for the physical mounting orientation of each motor.
@@ -39,17 +39,6 @@ When a command would drive either wheel beyond the configured maximum speed, the
 #### Scenario: Pure rotation at the limit
 - **WHEN** `set_speed(0, ω)` is issued such that `|ω|·B/2` exceeds `v_max`
 - **THEN** the wheel targets are scaled down so the robot spins about the same center at a lower rate
-
-### Requirement: Smooth acceleration
-The controller SHALL ramp wheel speed from the current value to the commanded target over a configured ramp duration instead of stepping instantly. The ramp SHALL apply to both wheels.
-
-#### Scenario: Ramp from rest
-- **WHEN** `set_speed(200, 0)` is issued while the wheels are at rest
-- **THEN** wheel speed increases gradually toward 200 mm/s without an instantaneous step
-
-#### Scenario: Ramp on target change
-- **WHEN** a new command changes the target while a ramp is in progress
-- **THEN** the wheels transition smoothly from the current speed to the new target
 
 ### Requirement: Closed-loop wheel speed control
 

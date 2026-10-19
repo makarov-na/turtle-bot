@@ -44,7 +44,6 @@ const float WHEELBASE_MM = 185.0f;
 const float V_MAX_MM_S = 300.0f;
 const float OMEGA_MAX_RAD_S = 2.0f * V_MAX_MM_S / WHEELBASE_MM;
 
-const uint32_t RAMP_DURATION_MS = 1;
 const uint32_t BRAKE_DURATION_MS = 300;
 const uint32_t PID_PERIOD_MS = 10;
 const uint16_t MIN_TICK_US = 50;
@@ -109,11 +108,7 @@ struct Wheel {
   int32_t prevTicks = 0;
 
   float targetLinear = 0.0f;
-  float rampedLinear = 0.0f;
   float measuredLinear = 0.0f;
-  float rampFrom = 0.0f;
-  uint32_t rampStartMs = 0;
-  bool ramping = false;
 
   float integral = 0.0f;
   float prevError = 0.0f;
@@ -121,23 +116,7 @@ struct Wheel {
   bool speedFilterInit = false;
 
   void setTarget(float target) {
-    rampFrom = rampedLinear;
-    rampStartMs = millis();
-    ramping = true;
     targetLinear = target;
-  }
-
-  void updateRamp(uint32_t now) {
-    if (!ramping) {
-      return;
-    }
-    float t = (float)(now - rampStartMs) / (float)RAMP_DURATION_MS;
-    if (t >= 1.0f) {
-      rampedLinear = targetLinear;
-      ramping = false;
-    } else {
-      rampedLinear = rampFrom + (targetLinear - rampFrom) * t;
-    }
   }
 
   void measureSpeed(float dtSec) {
@@ -317,9 +296,8 @@ void controlLoop() {
 
   for (int w = 0; w < 2; w++) {
     Wheel &wh = wheels[w];
-    wh.updateRamp(now);
     wh.measureSpeed(dt);
-    float out = wh.pidUpdate(wh.rampedLinear, wh.measuredLinear, dt);
+    float out = wh.pidUpdate(wh.targetLinear, wh.measuredLinear, dt);
     wh.lastOut = out;
     wh.applyPwm(out);
   }
