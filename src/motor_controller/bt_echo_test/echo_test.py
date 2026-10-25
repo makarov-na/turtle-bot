@@ -31,9 +31,13 @@ def open_port(path):
     attrs[0] &= ~(termios.BRKINT | termios.ISTRIP | termios.INLCR
                   | termios.IGNCR | termios.ICRNL | termios.IXON)
     attrs[1] &= ~termios.OPOST
-    attrs[2] &= ~(termios.CSIZE | termios.PARENB)
+    attrs[2] &= ~(termios.CSIZE | termios.PARENB | termios.CSTOPB)
     attrs[2] |= termios.CS8
     attrs[3] &= ~(termios.ECHO | termios.ICANON | termios.ISIG)
+    # Скорость задаём явно: наследование скорости tty маскировало бы
+    # несовпадение с HC-06/прошивкой под видом «тест не прошёл».
+    attrs[4] = termios.B115200
+    attrs[5] = termios.B115200
     termios.tcsetattr(fd, termios.TCSANOW, attrs)
     return fd
 

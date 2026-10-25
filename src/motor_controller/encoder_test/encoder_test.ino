@@ -25,7 +25,7 @@
 #define PIN_ENC_L_A A2
 #define PIN_ENC_L_B A3
 
-#define HARDWARE_SERIAL_BAUD 9600
+#define HARDWARE_SERIAL_BAUD 115200
 
 const float WHEEL_DIAMETER_MM = 67.0f;
 const uint32_t SEND_PERIOD_MS = 1000;

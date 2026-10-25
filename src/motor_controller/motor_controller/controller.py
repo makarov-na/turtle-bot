@@ -43,7 +43,10 @@ HEARTBEAT_MS = 200
 STEP_PCT = 10.0
 CLAMP_MIN = -100.0
 CLAMP_MAX = 100.0
-BT_BAUD = 9600
+# Скорость виртуального tty /dev/rfcomm0. Реальную скорость UART задаёт
+# HC-06 (AT+BAUD8); здесь она должна совпадать, иначе настройка вводит в
+# заблуждение. Должна совпадать с BT_BAUD в motor_controller.ino.
+PORT_BAUD = termios.B115200
 LINK_TIMEOUT_S = 5.0
 
 V_MAX_MM_S = 300.0
@@ -301,8 +304,8 @@ def open_serial(port, probe=STOP_COMMAND):
         attrs[2] &= ~(termios.CSIZE | termios.PARENB | termios.CSTOPB)
         attrs[2] |= termios.CS8 | termios.CLOCAL | termios.CREAD
         attrs[3] = 0
-        attrs[4] = termios.B9600
-        attrs[5] = termios.B9600
+        attrs[4] = PORT_BAUD
+        attrs[5] = PORT_BAUD
         attrs[6][termios.VMIN] = 0
         attrs[6][termios.VTIME] = 0
         termios.tcsetattr(fd, termios.TCSANOW, attrs)

@@ -1,13 +1,11 @@
 # BT Command Receiver
 
 ## Purpose
-Приём и исполнение текстовых команд `set_speed <lin> <ang>` через Bluetooth-канал Hardware Serial (D0/D1, 9600 бод) с телеметрией-keepalive, watchdog-остановкой и безопасным поведением при старте.
-
+Приём и исполнение текстовых команд `set_speed <lin> <ang>` через Bluetooth-канал Hardware Serial (D0/D1, 115200 бод) с телеметрией-keepalive, watchdog-остановкой и безопасным поведением при старте.
 ## Requirements
-
 ### Requirement: Parse set_speed commands over Hardware Serial
 
-The firmware SHALL read incoming lines from the Bluetooth channel via Hardware Serial (D0/D1, 9600 baud) and parse commands in the text form `set_speed <linear_speed> <angular_speed>`, where `linear_speed` is in mm/s and `angular_speed` in rad/s, both possibly negative floats. A valid command SHALL be applied through the existing `set_speed()` motion controller. Lines that do not match the syntax or that contain non-numeric values SHALL be ignored without affecting the current command.
+The firmware SHALL read incoming lines from the Bluetooth channel via Hardware Serial (D0/D1, 115200 baud) and parse commands in the text form `set_speed <linear_speed> <angular_speed>`, where `linear_speed` is in mm/s and `angular_speed` in rad/s, both possibly negative floats. A valid command SHALL be applied through the existing `set_speed()` motion controller. Lines that do not match the syntax or that contain non-numeric values SHALL be ignored without affecting the current command.
 
 #### Scenario: Valid command is applied
 
@@ -90,3 +88,4 @@ The firmware SHALL accept commands whose values exceed the configured limits and
 
 - **WHEN** `set_speed 0 10` arrives with `ω_max ≈ 3.24` rad/s
 - **THEN** the motion controller scales the wheel targets down and the robot spins at a rate within the limit
+
