@@ -25,12 +25,16 @@
 // Команды принимаются всегда. Watchdog: если команда не получена более
 // WATCHDOG_TIMEOUT_MS, бот выполняет stop() до прихода новой команды.
 
-// Табы скетча (Arduino склеивает этот файл первым, остальные — по алфавиту):
-//   bt_config.ino — автоконфигурация HC-06 (BtConfigurator);
+#include "bt_config.h"
+
+// Табы скетча (Arduino склеивает этот файл первым, остальные .ino — по
+// алфавиту):
 //   commands.ino  — CommandReceiver: приём, разбор, watchdog;
 //   encoders.ino  — Encoder/Encoders и ISR квадратурных энкодеров;
 //   motors.ino    — Motor/Chassis: драйверы, кинематика и PID;
 //   telemetry.ino — Telemetry и Robot: кадр ack и композиция модулей.
+//
+// Отдельный C++-модуль: bt_config.h/.cpp — автоконфигурация HC-06.
 
 // Общий идентификатор мотора: используется motors.ino, encoders.ino и
 // telemetry.ino.
@@ -48,8 +52,14 @@ struct TelemetryFrame {
 };
 
 void setup() {
-  // Композиция модулей и вся инициализация — в telemetry.ino (Robot).
+  // Ядровая логика — композиция Robot в telemetry.ino.
   robotInit();
+
+  // Автоконфигурация HC-06 — самостоятельный опциональный шаг. Экземпляр
+  // нужен только на время инициализации: после setup() состояние живёт в
+  // самом модуле HC-06 и Hardware Serial.
+  BtConfigurator bt;
+  bt.btInit(Serial, LED_BUILTIN);
 }
 
 void loop() {
