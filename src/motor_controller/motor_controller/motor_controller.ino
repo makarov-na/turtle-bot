@@ -26,25 +26,27 @@
 // 1000 мс, бот выполняет stop() до прихода новой команды.
 
 #include "bt_config.h"
+#include "encoders.h"
+#include "robot.h"
 
-// Табы скетча (Arduino склеивает этот файл первым, остальные .ino — по
-// алфавиту):
-//   encoders.ino  — Encoder/Encoders и ISR квадратурных энкодеров;
-//   motors.ino    — Motor/Chassis: драйверы, кинематика и PID;
-//   robot.ino     — Robot: композиция ядровых модулей.
-//
-// Отдельные C++-модули:
+// Модули — отдельные C++-единицы трансляции:
+//   encoders.h/.cpp         — Encoder/Encoders и ISR квадратурных энкодеров;
+//   motors.h/.cpp           — Motor/Chassis: драйверы, кинематика и PID;
+//   robot.h/.cpp            — Robot: композиция ядровых модулей;
 //   bt_config.h/.cpp        — автоконфигурация HC-06;
 //   command_receiver.h/.cpp — приём, разбор команд и watchdog;
 //   telemetry.h/.cpp        — TelemetryFrame и периодический кадр ack.
+//
+// Здесь остаются только точки входа Arduino и создание корневых экземпляров.
 
-// Общий идентификатор мотора: используется motors.ino, encoders.ino и
-// robot.ino.
-enum class MotorId : uint8_t { Left = 0, Right = 1, Count = 2 };
+// Порядок объявления важен: encoders инициализируется до robot, который
+// сохраняет на него ссылку.
+Encoders encoders;
+Robot robot(encoders);
 
 void setup() {
-  // Ядровая логика — композиция Robot в robot.ino.
-  robotInit();
+  // Ядровая логика — экземпляр Robot выше.
+  robot.begin();
 
   // Автоконфигурация HC-06 — самостоятельный опциональный шаг. Экземпляр
   // нужен только на время инициализации: после setup() состояние живёт в
@@ -54,5 +56,5 @@ void setup() {
 }
 
 void loop() {
-  robotTick();
+  robot.tick();
 }
