@@ -32,27 +32,18 @@
 //   commands.ino  — CommandReceiver: приём, разбор, watchdog;
 //   encoders.ino  — Encoder/Encoders и ISR квадратурных энкодеров;
 //   motors.ino    — Motor/Chassis: драйверы, кинематика и PID;
-//   telemetry.ino — Telemetry и Robot: кадр ack и композиция модулей.
+//   robot.ino     — Robot: композиция ядровых модулей.
 //
-// Отдельный C++-модуль: bt_config.h/.cpp — автоконфигурация HC-06.
+// Отдельные C++-модули:
+//   bt_config.h/.cpp — автоконфигурация HC-06;
+//   telemetry.h/.cpp — TelemetryFrame и периодический кадр ack.
 
 // Общий идентификатор мотора: используется motors.ino, encoders.ino и
-// telemetry.ino.
+// robot.ino.
 enum class MotorId : uint8_t { Left = 0, Right = 1, Count = 2 };
 
-// Снимок одного кадра телеметрии. Заполняется Chassis и CommandReceiver,
-// форматируется Telemetry; поля соответствуют протоколу ack.
-struct TelemetryFrame {
-  uint32_t counter;
-  float linear;
-  float angular;
-  float measured[2];
-  float pwm[2];
-  float integral[2];
-};
-
 void setup() {
-  // Ядровая логика — композиция Robot в telemetry.ino.
+  // Ядровая логика — композиция Robot в robot.ino.
   robotInit();
 
   // Автоконфигурация HC-06 — самостоятельный опциональный шаг. Экземпляр

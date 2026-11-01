@@ -7,8 +7,10 @@
 //
 // Arduino склеивает табы так: сначала motor_controller.ino, затем остальные по
 // алфавиту. Поэтому объявления этого файла недоступны основному скетчу, а
-// глобальные объявления основного скетча (enum MotorId, TelemetryFrame) здесь
+// общий enum MotorId из основного скетча и TelemetryFrame из telemetry.h здесь
 // видны.
+
+#include "telemetry.h"
 
 #define PIN_IN1_R  2
 #define PIN_IN2_R  3
