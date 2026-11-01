@@ -26,31 +26,32 @@
 // WATCHDOG_TIMEOUT_MS, бот выполняет stop() до прихода новой команды.
 
 // Табы скетча (Arduino склеивает этот файл первым, остальные — по алфавиту):
-//   bt_config.ino — автоконфигурация HC-06;
-//   commands.ino  — приём и разбор команд, watchdog;
-//   encoders.ino  — классы Encoder/Encoders, ISR квадратурных энкодеров;
-//   motors.ino    — драйверы, кинематика и PID;
-//   telemetry.ino — периодический кадр телеметрии.
+//   bt_config.ino — автоконфигурация HC-06 (BtConfigurator);
+//   commands.ino  — CommandReceiver: приём, разбор, watchdog;
+//   encoders.ino  — Encoder/Encoders и ISR квадратурных энкодеров;
+//   motors.ino    — Motor/Chassis: драйверы, кинематика и PID;
+//   telemetry.ino — Telemetry и Robot: кадр ack и композиция модулей.
 
 // Общий идентификатор мотора: используется motors.ino, encoders.ino и
 // telemetry.ino.
-enum MotorId { MOTOR_LEFT = 0, MOTOR_RIGHT = 1 };
+enum class MotorId : uint8_t { Left = 0, Right = 1, Count = 2 };
+
+// Снимок одного кадра телеметрии. Заполняется Chassis и CommandReceiver,
+// форматируется Telemetry; поля соответствуют протоколу ack.
+struct TelemetryFrame {
+  uint32_t counter;
+  float linear;
+  float angular;
+  float measured[2];
+  float pwm[2];
+  float integral[2];
+};
 
 void setup() {
-  motorsInit();
-
-  // Конфигурация HC-06 вынесена в bt_config.ino; по выходу Hardware Serial
-  // уже открыт на нужной скорости (BT_BAUD объявлен в том файле).
-  uint8_t btResult = btConfigureModule();
-  btBlinkResult(btResult);
-  Serial.println("hello PC from ARDU");
+  // Композиция модулей и вся инициализация — в telemetry.ino (Robot).
+  robotInit();
 }
 
 void loop() {
-  uint32_t now = millis();
-
-  motorsTick(now);
-  commandsProcess();
-  telemetryTick(now);
-  commandsWatchdogTick();
+  robotTick();
 }

@@ -13,6 +13,8 @@
 // статической таблицы kQuadTable: в C++11 (AVR-ядро собирает с -std=gnu++11)
 // статический массив-член нельзя инициализировать в теле класса.
 
+#include <util/atomic.h>
+
 #define PIN_ENC_R_A A0
 #define PIN_ENC_R_B A1
 #define PIN_ENC_L_A A2
@@ -35,29 +37,14 @@ const float WHEEL_DIAMETER_MM = 67.0f;
 
 class Encoder {
  public:
-  // Обрабатывает новое состояние каналов A/B (младшие 2 бита).
-  void update(uint8_t state) {
-    uint8_t idx = (prevState_ << 2) | state;
-    int8_t step = kQuadTable[idx];
-    if (step != 0) {
-      prevState_ = state;
-      uint32_t now = micros();
-      if (now - lastTickMicros_ >= MIN_TICK_US) {
-        lastTickMicros_ = now;
-        ticks_ += step;
-      }
-    }
-  }
-
-  // Текущее число тиков. Читается из основного цикла, пишется из ISR.
-  int32_t ticks() const {
-    return ticks_;
-  }
+  Encoder() = default;
+  Encoder(const Encoder &) = delete;
+  Encoder &operator=(const Encoder &) = delete;
 
   // Перебазирует опорную точку после паузы: следующая итерация считает тики
   // только с этого момента.
   void rebase() {
-    prevTicks_ = ticks_;
+    prevTicks_ = takeTicks();
     filterInit_ = false;
   }
 
@@ -69,7 +56,7 @@ class Encoder {
   // Возвращает сглаженную скорость в мм/с. direction — знак колеса
   // (motorSign): +1 для правого, -1 для левого при движении вперёд.
   float measureSpeed(float dtSec, int8_t direction) {
-    int32_t currentTicks = ticks_;
+    int32_t currentTicks = takeTicks();
     int32_t delta = currentTicks - prevTicks_;
     prevTicks_ = currentTicks;
     float mmPerTick = PI * WHEEL_DIAMETER_MM / (float)TICKS_PER_WHEEL_REV;
@@ -87,6 +74,33 @@ class Encoder {
   }
 
  private:
+  friend class Encoders;
+
+  // Обрабатывает новое состояние каналов A/B (младшие 2 бита). Вызывается
+  // только из Encoders::handleInterrupt(), то есть из ISR.
+  void update(uint8_t state) {
+    uint8_t idx = (prevState_ << 2) | state;
+    int8_t step = kQuadTable[idx];
+    if (step != 0) {
+      prevState_ = state;
+      uint32_t now = micros();
+      if (now - lastTickMicros_ >= MIN_TICK_US) {
+        lastTickMicros_ = now;
+        ticks_ += step;
+      }
+    }
+  }
+
+  // Атомарный снимок 32-битного счётчика. На AVR volatile не делает чтение
+  // четырёх байт атомарным: ISR может обновить ticks_ между байтами.
+  int32_t takeTicks() const {
+    int32_t snapshot;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      snapshot = ticks_;
+    }
+    return snapshot;
+  }
+
   static const int8_t kQuadTable[16];
 
   volatile int32_t ticks_ = 0;
@@ -114,6 +128,10 @@ const int8_t Encoder::kQuadTable[16] = {
 
 class Encoders {
  public:
+  Encoders() = default;
+  Encoders(const Encoders &) = delete;
+  Encoders &operator=(const Encoders &) = delete;
+
   void begin() {
     pinMode(PIN_ENC_L_A, INPUT_PULLUP);
     pinMode(PIN_ENC_L_B, INPUT_PULLUP);
@@ -126,12 +144,12 @@ class Encoders {
 
   void handleInterrupt() {
     uint8_t pins = PINC & 0x0F;
-    encoders_[MOTOR_LEFT].update((pins >> 2) & 0x03);
-    encoders_[MOTOR_RIGHT].update(pins & 0x03);
+    encoders_[static_cast<uint8_t>(MotorId::Left)].update((pins >> 2) & 0x03);
+    encoders_[static_cast<uint8_t>(MotorId::Right)].update(pins & 0x03);
   }
 
-  Encoder &operator[](uint8_t index) {
-    return encoders_[index];
+  Encoder &operator[](MotorId id) {
+    return encoders_[static_cast<uint8_t>(id)];
   }
 
  private:

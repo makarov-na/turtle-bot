@@ -1,43 +1,117 @@
-// --- Периодическая телеметрия ----------------------------------------------
-// Вынесено из motor_controller.ino. Кадр печатается по таймеру из loop(), а не
-// в ответ на команду: иначе накопившиеся в RX-буфере команды печатаются
-// пачкой и не дают controlLoop() выполниться (см. design.md).
+// --- Периодическая телеметрия и композиция модулей -------------------------
+// Telemetry только форматирует готовый TelemetryFrame: таймер кадра и порт
+// принадлежат классу, а откуда взялись значения, ему неизвестно.
+//
+// Robot — корень композиции: владеет приводом, приёмником команд,
+// телеметрией и BT-конфигуратором, связывает их зависимости и повторяет
+// прежний порядок работы setup()/loop().
+//
+// Кадр печатается по таймеру, а не в ответ на команду: иначе накопившиеся в
+// RX-буфере команды печатаются пачкой и не дают контуру выполниться
+// (см. design.md).
 //
 // Непрерывный двунаправленный трафик удерживает RFCOMM-линк HC-06 (проверено:
 // ≥60 с против обрыва ~5.2 с на одностороннем трафике).
 
 const uint32_t TELEMETRY_PERIOD_MS = 200;
 
-static uint32_t lastTelemetryMs = 0;
+class Telemetry {
+ public:
+  // Привязывает кадры к порту. Вызывается из Robot::begin(), когда порт уже
+  // настроен BT-конфигуратором.
+  void begin(Stream &serial) {
+    serial_ = &serial;
+  }
 
-// v/w — последняя применённая уставка, n — счётчик обработанных команд.
-void sendTelemetry() {
-  Serial.print("ack ");
-  Serial.print(commandsCounter());
-  Serial.print(" ");
-  Serial.print(commandsLastLinear());
-  Serial.print(" ");
-  Serial.print(commandsLastAngular());
-  // Диагностика: измеренная скорость, ШИМ и интеграл каждого колеса.
-  // mL/mR = изм. мм/с, oL/oR = ШИМ ±255, iL/iR = интеграл.
-  Serial.print(" mL=");
-  Serial.print(motorMeasuredSpeed(MOTOR_LEFT));
-  Serial.print(" mR=");
-  Serial.print(motorMeasuredSpeed(MOTOR_RIGHT));
-  Serial.print(" oL=");
-  Serial.print(motorPwm(MOTOR_LEFT));
-  Serial.print(" oR=");
-  Serial.print(motorPwm(MOTOR_RIGHT));
-  Serial.print(" iL=");
-  Serial.print(motorIntegral(MOTOR_LEFT));
-  Serial.print(" iR=");
-  Serial.print(motorIntegral(MOTOR_RIGHT));
-  Serial.println();
+  // Печатает кадр не чаще TELEMETRY_PERIOD_MS. now — единый источник времени
+  // основного цикла.
+  void tick(uint32_t now, const TelemetryFrame &frame) {
+    if (now - lastMs_ >= TELEMETRY_PERIOD_MS) {
+      send_(frame);
+      lastMs_ = now;
+    }
+  }
+
+ private:
+  // v/w — последняя применённая уставка, n — счётчик обработанных команд.
+  void send_(const TelemetryFrame &frame) {
+    serial_->print("ack ");
+    serial_->print(frame.counter);
+    serial_->print(" ");
+    serial_->print(frame.linear);
+    serial_->print(" ");
+    serial_->print(frame.angular);
+    // Диагностика: измеренная скорость, ШИМ и интеграл каждого колеса.
+    // mL/mR = изм. мм/с, oL/oR = ШИМ ±255, iL/iR = интеграл.
+    serial_->print(" mL=");
+    serial_->print(frame.measured[0]);
+    serial_->print(" mR=");
+    serial_->print(frame.measured[1]);
+    serial_->print(" oL=");
+    serial_->print(frame.pwm[0]);
+    serial_->print(" oR=");
+    serial_->print(frame.pwm[1]);
+    serial_->print(" iL=");
+    serial_->print(frame.integral[0]);
+    serial_->print(" iR=");
+    serial_->print(frame.integral[1]);
+    serial_->println();
+  }
+
+  Stream *serial_ = nullptr;
+  uint32_t lastMs_ = 0;
+};
+
+// Корень композиции. Порядок инициализации повторяет прежний setup(), порядок
+// тика — прежний loop(): привод, приём команд, кадр телеметрии, watchdog.
+class Robot {
+ public:
+  Robot() : chassis_(encoders), commands_(chassis_) {}
+
+  void begin() {
+    chassis_.begin();
+
+    // По выходу configure() Hardware Serial уже открыт на нужной скорости.
+    bt_.begin(Serial, LED_BUILTIN);
+    BtResult btResult = bt_.configure();
+    bt_.blinkResult(btResult);
+
+    Serial.println("hello PC from ARDU");
+    telemetry_.begin(Serial);
+  }
+
+  void tick() {
+    uint32_t now = millis();
+
+    chassis_.tick(now);
+
+    // Свежее время для команд и watchdog: команда могла прийти уже после
+    // снятия now, а таймаут считается от текущего millis() — как раньше.
+    commands_.process(Serial, millis());
+
+    TelemetryFrame frame;
+    commands_.fillTelemetry(frame);
+    chassis_.fillTelemetry(frame);
+    telemetry_.tick(now, frame);
+
+    commands_.watchdogTick(millis());
+  }
+
+ private:
+  Chassis chassis_;
+  CommandReceiver commands_;
+  Telemetry telemetry_;
+  BtConfigurator bt_;
+};
+
+Robot robot;
+
+// Единственные точки входа, которые видны основному скетчу: типы модулей
+// объявлены в более поздних табах и в setup()/loop() недоступны.
+void robotInit() {
+  robot.begin();
 }
 
-void telemetryTick(uint32_t now) {
-  if (now - lastTelemetryMs >= TELEMETRY_PERIOD_MS) {
-    sendTelemetry();
-    lastTelemetryMs = now;
-  }
+void robotTick() {
+  robot.tick();
 }

@@ -1,13 +1,14 @@
 // --- Моторы, кинематика и PID ----------------------------------------------
-// Вынесено из motor_controller.ino. Снаружи нужны только motorsInit(),
-// motorsTick() и аксессоры для телеметрии. Класс Motor скрывает энкодер,
-// драйвер и состояние контура скорости; в файле остаётся состояние привода
-// (driveState, lastControlMs). Работу с энкодерами мотор делегирует классам
-// Encoder/Encoders из encoders.ino.
+// Вынесено из motor_controller.ino. Класс Motor скрывает энкодер, драйвер и
+// состояние контура скорости; класс Chassis владеет двумя моторами, режимом
+// привода, таймерами, насыщением уставок и остановками. Снаружи Chassis
+// реализует CommandSink (set_speed/stop/power_stop) и отдаёт снимок для
+// телеметрии.
 //
 // Arduino склеивает табы так: сначала motor_controller.ino, затем остальные по
 // алфавиту. Поэтому объявления этого файла недоступны основному скетчу, а
-// глобальные объявления основного скетча (например, enum MotorId) здесь видны.
+// глобальные объявления основного скетча (enum MotorId, TelemetryFrame) здесь
+// видны.
 
 #define PIN_IN1_R  2
 #define PIN_IN2_R  3
@@ -36,15 +37,32 @@ const float PID_INTEGRAL_LIMIT = 500.0f;
 // c ~60 ШИМ — бот "жужжит" и не едет. FF добавляет ~0.85·setpoint сразу.
 const float PID_FF = 255.0f / V_MAX_MM_S;
 
-enum DriveState { STATE_STOPPED, STATE_RUN, STATE_BRAKING };
+// Снимок состояния одного мотора для телеметрии. PID-внутренности остаются
+// закрытыми, наружу отдаётся только то, что требует протокол ack.
+struct MotorTelemetry {
+  float measuredSpeed;
+  float pwm;
+  float integral;
+};
+
+class Chassis;
 
 // Один мотор: энкодер, драйвер L298N, редуктор и контур скорости. Состояние
-// контура (уставка, измеренная скорость, интегратор, последний ШИМ) закрыто;
-// наружу торчат только операции и read-only геттеры для телеметрии.
+// контура закрыто; менять его может только Chassis.
 class Motor {
  public:
   Motor(uint8_t pwm, uint8_t in1, uint8_t in2, int8_t sign, Encoder &enc)
       : pinPwm_(pwm), pinIn1_(in1), pinIn2_(in2), motorSign_(sign), encoder_(enc) {}
+
+  Motor(const Motor &) = delete;
+  Motor &operator=(const Motor &) = delete;
+
+  MotorTelemetry telemetry() const {
+    return MotorTelemetry{measuredLinear_, lastOut_, integral_};
+  }
+
+ private:
+  friend class Chassis;
 
   void setTarget(float target) {
     targetLinear_ = target;
@@ -80,19 +98,6 @@ class Motor {
     analogWrite(pinPwm_, 0);
   }
 
-  float measuredSpeed() const {
-    return measuredLinear_;
-  }
-
-  float pwm() const {
-    return lastOut_;
-  }
-
-  float integralValue() const {
-    return integral_;
-  }
-
- private:
   float pidUpdate(float setpoint, float feedback, float dt) {
     float error = setpoint - feedback;
     integral_ += error * dt;
@@ -132,127 +137,142 @@ class Motor {
   float lastOut_ = 0.0f;
 };
 
-Motor motors[2] = {
-    {PIN_ENB_L, PIN_IN3_L, PIN_IN4_L, -1, encoders[MOTOR_LEFT]},
-    {PIN_ENA_R, PIN_IN1_R, PIN_IN2_R, +1, encoders[MOTOR_RIGHT]}
-};
+// Привод целиком: два мотора, режим (stopped/run/braking) и таймеры.
+// Инварианты режима и насыщение уставок живут только здесь.
+class Chassis : public CommandSink {
+ public:
+  explicit Chassis(Encoders &encoders)
+      : encoders_(encoders),
+        motors_{
+            {PIN_ENB_L, PIN_IN3_L, PIN_IN4_L, -1, encoders_[MotorId::Left]},
+            {PIN_ENA_R, PIN_IN1_R, PIN_IN2_R, +1, encoders_[MotorId::Right]}} {}
 
-DriveState driveState = STATE_STOPPED;
-uint32_t brakeStartMs = 0;
-uint32_t lastControlMs = 0;
+  void begin() {
+    pinMode(PIN_ENA_R, OUTPUT);
+    pinMode(PIN_IN1_R, OUTPUT);
+    pinMode(PIN_IN2_R, OUTPUT);
+    pinMode(PIN_ENB_L, OUTPUT);
+    pinMode(PIN_IN3_L, OUTPUT);
+    pinMode(PIN_IN4_L, OUTPUT);
 
-void set_speed(float linearSpeed, float angularSpeed) {
-  float vRight = linearSpeed + angularSpeed * WHEELBASE_MM / 2.0f;
-  float vLeft = linearSpeed - angularSpeed * WHEELBASE_MM / 2.0f;
+    motors_[index(MotorId::Left)].coast();
+    motors_[index(MotorId::Right)].coast();
+    state_ = DriveState::Stopped;
 
-  float maxAbs = fmaxf(fabsf(vLeft), fabsf(vRight));
-  if (maxAbs > V_MAX_MM_S) {
-    float k = V_MAX_MM_S / maxAbs;
-    vLeft *= k;
-    vRight *= k;
+    encoders_.begin();
   }
 
-  // Вход в режим управления после паузы: перебазировать опорную точку контура,
-  // чтобы первая итерация не увидела накопленные за паузу тики и время.
-  // Команда поверх уже идущего STATE_RUN (heartbeat) НЕ перебазирует: иначе
-  // таймер контура сбрасывался бы каждые 200 мс и controlLoop() не успевал бы
-  // отработать.
-  if (driveState != STATE_RUN) {
-    lastControlMs = millis();
-    for (int w = 0; w < 2; w++) {
-      motors[w].rebaseEncoder();
+  // Один тик привода из Robot::tick(): завершает торможение по таймеру и,
+  // если привод в режиме Run, выполняет итерацию PID.
+  void tick(uint32_t now) {
+    if (state_ == DriveState::Braking &&
+        now - brakeStartMs_ >= BRAKE_DURATION_MS) {
+      state_ = DriveState::Stopped;
+      motors_[index(MotorId::Left)].coast();
+      motors_[index(MotorId::Right)].coast();
+    }
+
+    if (state_ == DriveState::Run) {
+      controlLoop_();
     }
   }
 
-  driveState = STATE_RUN;
-  motors[MOTOR_LEFT].setTarget(vLeft);
-  motors[MOTOR_RIGHT].setTarget(vRight);
-}
+  void set_speed(float linearSpeed, float angularSpeed) override {
+    float vRight = linearSpeed + angularSpeed * WHEELBASE_MM / 2.0f;
+    float vLeft = linearSpeed - angularSpeed * WHEELBASE_MM / 2.0f;
 
-void stop() {
-  driveState = STATE_STOPPED;
-  motors[MOTOR_LEFT].setTarget(0.0f);
-  motors[MOTOR_RIGHT].setTarget(0.0f);
-  motors[MOTOR_LEFT].coast();
-  motors[MOTOR_RIGHT].coast();
-  motors[MOTOR_LEFT].resetPid();
-  motors[MOTOR_RIGHT].resetPid();
-}
+    float maxAbs = fmaxf(fabsf(vLeft), fabsf(vRight));
+    if (maxAbs > V_MAX_MM_S) {
+      float k = V_MAX_MM_S / maxAbs;
+      vLeft *= k;
+      vRight *= k;
+    }
 
-void power_stop() {
-  motors[MOTOR_LEFT].setTarget(0.0f);
-  motors[MOTOR_RIGHT].setTarget(0.0f);
-  motors[MOTOR_LEFT].resetPid();
-  motors[MOTOR_RIGHT].resetPid();
-  driveState = STATE_BRAKING;
-  brakeStartMs = millis();
-  motors[MOTOR_LEFT].brake();
-  motors[MOTOR_RIGHT].brake();
-}
+    // Вход в режим управления после паузы: перебазировать опорную точку
+    // контура, чтобы первая итерация не увидела накопленные за паузу тики и
+    // время. Команда поверх уже идущего Run (heartbeat) НЕ перебазирует:
+    // иначе таймер контура сбрасывался бы каждые 200 мс и controlLoop_() не
+    // успевал бы отработать.
+    if (state_ != DriveState::Run) {
+      lastControlMs_ = millis();
+      for (uint8_t i = 0; i < kMotorCount; i++) {
+        motors_[i].rebaseEncoder();
+      }
+    }
 
-void controlLoop() {
-  uint32_t now = millis();
-  uint32_t gap = now - lastControlMs;
-  if (gap < PID_PERIOD_MS) {
-    return;
-  }
-  // Длинная итерация во время активного управления (например, блокирующая
-  // печать кадра телеметрии ~78 мс) — это НЕ пауза: колесо всё это время
-  // вращалось, дельта тиков настоящая. Меряем по реальному dt и ничего не
-  // подменяем нулём. Настоящая пауза (торможение/останов/watchdog) видна по
-  // смене driveState и обрабатывается перебазированием в set_speed().
-  float dt = (float)gap / 1000.0f;
-  // Дедлайн следующей итерации — от текущего момента, без захода в будущее:
-  // иначе uint32_t-разность на следующей итерации переполняется и даёт
-  // ложный огромный gap (и подмен нулём через старую ветку gap > 200UL).
-  lastControlMs = now;
-
-  for (int w = 0; w < 2; w++) {
-    motors[w].tick(dt);
-  }
-}
-
-// --- Инициализация и тик модуля --------------------------------------------
-
-void motorsInit() {
-  pinMode(PIN_ENA_R, OUTPUT);
-  pinMode(PIN_IN1_R, OUTPUT);
-  pinMode(PIN_IN2_R, OUTPUT);
-  pinMode(PIN_ENB_L, OUTPUT);
-  pinMode(PIN_IN3_L, OUTPUT);
-  pinMode(PIN_IN4_L, OUTPUT);
-
-  motors[MOTOR_LEFT].coast();
-  motors[MOTOR_RIGHT].coast();
-  driveState = STATE_STOPPED;
-
-  encoders.begin();
-}
-
-// Один тик модуля из loop(): завершает торможение по таймеру и, если привод
-// в режиме RUN, выполняет итерацию PID.
-void motorsTick(uint32_t now) {
-  if (driveState == STATE_BRAKING && now - brakeStartMs >= BRAKE_DURATION_MS) {
-    driveState = STATE_STOPPED;
-    motors[MOTOR_LEFT].coast();
-    motors[MOTOR_RIGHT].coast();
+    state_ = DriveState::Run;
+    motors_[index(MotorId::Left)].setTarget(vLeft);
+    motors_[index(MotorId::Right)].setTarget(vRight);
   }
 
-  if (driveState == STATE_RUN) {
-    controlLoop();
+  void stop() override {
+    state_ = DriveState::Stopped;
+    motors_[index(MotorId::Left)].setTarget(0.0f);
+    motors_[index(MotorId::Right)].setTarget(0.0f);
+    motors_[index(MotorId::Left)].coast();
+    motors_[index(MotorId::Right)].coast();
+    motors_[index(MotorId::Left)].resetPid();
+    motors_[index(MotorId::Right)].resetPid();
   }
-}
 
-// --- Аксессоры для телеметрии ----------------------------------------------
+  void power_stop() override {
+    motors_[index(MotorId::Left)].setTarget(0.0f);
+    motors_[index(MotorId::Right)].setTarget(0.0f);
+    motors_[index(MotorId::Left)].resetPid();
+    motors_[index(MotorId::Right)].resetPid();
+    state_ = DriveState::Braking;
+    brakeStartMs_ = millis();
+    motors_[index(MotorId::Left)].brake();
+    motors_[index(MotorId::Right)].brake();
+  }
 
-float motorMeasuredSpeed(uint8_t motor) {
-  return motors[motor].measuredSpeed();
-}
+  MotorTelemetry telemetry(MotorId id) const {
+    return motors_[static_cast<uint8_t>(id)].telemetry();
+  }
 
-float motorPwm(uint8_t motor) {
-  return motors[motor].pwm();
-}
+  void fillTelemetry(TelemetryFrame &frame) const {
+    for (uint8_t i = 0; i < kMotorCount; i++) {
+      MotorTelemetry t = motors_[i].telemetry();
+      frame.measured[i] = t.measuredSpeed;
+      frame.pwm[i] = t.pwm;
+      frame.integral[i] = t.integral;
+    }
+  }
 
-float motorIntegral(uint8_t motor) {
-  return motors[motor].integralValue();
-}
+ private:
+  enum class DriveState : uint8_t { Stopped, Run, Braking };
+
+  static constexpr uint8_t kMotorCount = 2;
+
+  static uint8_t index(MotorId id) {
+    return static_cast<uint8_t>(id);
+  }
+
+  void controlLoop_() {
+    uint32_t now = millis();
+    uint32_t gap = now - lastControlMs_;
+    if (gap < PID_PERIOD_MS) {
+      return;
+    }
+    // Длинная итерация во время активного управления (например, блокирующая
+    // печать кадра телеметрии ~78 мс) — это НЕ пауза: колесо всё это время
+    // вращалось, дельта тиков настоящая. Меряем по реальному dt и ничего не
+    // подменяем нулём. Настоящая пауза (торможение/останов/watchdog) видна по
+    // смене состояния и обрабатывается перебазированием в set_speed().
+    float dt = (float)gap / 1000.0f;
+    // Дедлайн следующей итерации — от текущего момента, без захода в будущее:
+    // иначе uint32_t-разность на следующей итерации переполняется и даёт
+    // ложный огромный gap.
+    lastControlMs_ = now;
+
+    for (uint8_t i = 0; i < kMotorCount; i++) {
+      motors_[i].tick(dt);
+    }
+  }
+
+  Encoders &encoders_;
+  Motor motors_[2];
+  DriveState state_ = DriveState::Stopped;
+  uint32_t brakeStartMs_ = 0;
+  uint32_t lastControlMs_ = 0;
+};
