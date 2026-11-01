@@ -21,17 +21,17 @@ void sendTelemetry() {
   // Диагностика: измеренная скорость, ШИМ и интеграл каждого колеса.
   // mL/mR = изм. мм/с, oL/oR = ШИМ ±255, iL/iR = интеграл.
   Serial.print(" mL=");
-  Serial.print(wheelMeasuredSpeed(WHEEL_LEFT));
+  Serial.print(motorMeasuredSpeed(MOTOR_LEFT));
   Serial.print(" mR=");
-  Serial.print(wheelMeasuredSpeed(WHEEL_RIGHT));
+  Serial.print(motorMeasuredSpeed(MOTOR_RIGHT));
   Serial.print(" oL=");
-  Serial.print(wheelPwm(WHEEL_LEFT));
+  Serial.print(motorPwm(MOTOR_LEFT));
   Serial.print(" oR=");
-  Serial.print(wheelPwm(WHEEL_RIGHT));
+  Serial.print(motorPwm(MOTOR_RIGHT));
   Serial.print(" iL=");
-  Serial.print(wheelIntegral(WHEEL_LEFT));
+  Serial.print(motorIntegral(MOTOR_LEFT));
   Serial.print(" iR=");
-  Serial.print(wheelIntegral(WHEEL_RIGHT));
+  Serial.print(motorIntegral(MOTOR_RIGHT));
   Serial.println();
 }
 

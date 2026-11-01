@@ -28,11 +28,13 @@
 // Табы скетча (Arduino склеивает этот файл первым, остальные — по алфавиту):
 //   bt_config.ino — автоконфигурация HC-06;
 //   commands.ino  — приём и разбор команд, watchdog;
-//   motors.ino    — драйверы, энкодеры, кинематика и PID;
+//   encoders.ino  — классы Encoder/Encoders, ISR квадратурных энкодеров;
+//   motors.ino    — драйверы, кинематика и PID;
 //   telemetry.ino — периодический кадр телеметрии.
 
-// Общий идентификатор колеса: используется motors.ino и telemetry.ino.
-enum WheelId { WHEEL_LEFT = 0, WHEEL_RIGHT = 1 };
+// Общий идентификатор мотора: используется motors.ino, encoders.ino и
+// telemetry.ino.
+enum MotorId { MOTOR_LEFT = 0, MOTOR_RIGHT = 1 };
 
 void setup() {
   motorsInit();
