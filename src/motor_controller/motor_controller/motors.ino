@@ -2,8 +2,7 @@
 // Вынесено из motor_controller.ino. Класс Motor скрывает энкодер, драйвер и
 // состояние контура скорости; класс Chassis владеет двумя моторами, режимом
 // привода, таймерами, насыщением уставок и остановками. Снаружи Chassis
-// реализует CommandSink (set_speed/stop/power_stop) и отдаёт снимок для
-// телеметрии.
+// предоставляет set_speed/stop/power_stop и снимок для телеметрии.
 //
 // Arduino склеивает табы так: сначала motor_controller.ino, затем остальные по
 // алфавиту. Поэтому объявления этого файла недоступны основному скетчу, а
@@ -141,7 +140,7 @@ class Motor {
 
 // Привод целиком: два мотора, режим (stopped/run/braking) и таймеры.
 // Инварианты режима и насыщение уставок живут только здесь.
-class Chassis : public CommandSink {
+class Chassis {
  public:
   explicit Chassis(Encoders &encoders)
       : encoders_(encoders),
@@ -179,7 +178,7 @@ class Chassis : public CommandSink {
     }
   }
 
-  void set_speed(float linearSpeed, float angularSpeed) override {
+  void set_speed(float linearSpeed, float angularSpeed) {
     float vRight = linearSpeed + angularSpeed * WHEELBASE_MM / 2.0f;
     float vLeft = linearSpeed - angularSpeed * WHEELBASE_MM / 2.0f;
 
@@ -207,7 +206,7 @@ class Chassis : public CommandSink {
     motors_[index(MotorId::Right)].setTarget(vRight);
   }
 
-  void stop() override {
+  void stop() {
     state_ = DriveState::Stopped;
     motors_[index(MotorId::Left)].setTarget(0.0f);
     motors_[index(MotorId::Right)].setTarget(0.0f);
@@ -217,7 +216,7 @@ class Chassis : public CommandSink {
     motors_[index(MotorId::Right)].resetPid();
   }
 
-  void power_stop() override {
+  void power_stop() {
     motors_[index(MotorId::Left)].setTarget(0.0f);
     motors_[index(MotorId::Right)].setTarget(0.0f);
     motors_[index(MotorId::Left)].resetPid();

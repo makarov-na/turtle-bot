@@ -23,20 +23,20 @@
 //     linear_speed  — мм/с, любой знак
 //     angular_speed — рад/с, любой знак
 // Команды принимаются всегда. Watchdog: если команда не получена более
-// WATCHDOG_TIMEOUT_MS, бот выполняет stop() до прихода новой команды.
+// 1000 мс, бот выполняет stop() до прихода новой команды.
 
 #include "bt_config.h"
 
 // Табы скетча (Arduino склеивает этот файл первым, остальные .ino — по
 // алфавиту):
-//   commands.ino  — CommandReceiver: приём, разбор, watchdog;
 //   encoders.ino  — Encoder/Encoders и ISR квадратурных энкодеров;
 //   motors.ino    — Motor/Chassis: драйверы, кинематика и PID;
 //   robot.ino     — Robot: композиция ядровых модулей.
 //
 // Отдельные C++-модули:
-//   bt_config.h/.cpp — автоконфигурация HC-06;
-//   telemetry.h/.cpp — TelemetryFrame и периодический кадр ack.
+//   bt_config.h/.cpp        — автоконфигурация HC-06;
+//   command_receiver.h/.cpp — приём, разбор команд и watchdog;
+//   telemetry.h/.cpp        — TelemetryFrame и периодический кадр ack.
 
 // Общий идентификатор мотора: используется motors.ino, encoders.ino и
 // robot.ino.

@@ -6,8 +6,8 @@
 //
 // Пины A0-A3 — это PORTC, поэтому ISR читает состояние сразу всей группы PINC.
 // Arduino склеивает табы в один файл: encoders.ino идёт после
-// motor_controller.ino и commands.ino, но до motors.ino, поэтому тип Encoder
-// уже доступен motors.ino.
+// motor_controller.ino, но до motors.ino, поэтому тип Encoder уже доступен
+// motors.ino.
 //
 // Методы определены прямо в классах. Вне класса остаётся только определение
 // статической таблицы kQuadTable: в C++11 (AVR-ядро собирает с -std=gnu++11)
