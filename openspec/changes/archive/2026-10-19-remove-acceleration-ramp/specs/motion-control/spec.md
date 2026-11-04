@@ -1,6 +1,0 @@
-## REMOVED Requirements
-
-### Requirement: Smooth acceleration
-**Reason**: The acceleration ramp is a no-op in the current firmware. `RAMP_DURATION_MS` is `1`, and `controlLoop()` does not run until at least `PID_PERIOD_MS` (10 ms) after `setTarget()`, so `t = (now - rampStartMs) / RAMP_DURATION_MS >= 1` on the first iteration and `rampedLinear` steps directly to the target. The code therefore implements no ramping, while this requirement claims it does. The ramp fell out of use because the jerky motion it was meant to prevent came from encoder quantization (fixed by the EMA in `balance-wheel-speeds`) and blocking telemetry, not from the setpoint step. Keeping the requirement would perpetuate spec/implementation drift.
-
-**Migration**: No runtime migration is required. Behavior does not change because the ramp was already effectively disabled (`RAMP_DURATION_MS = 1`); `set_speed` continues to apply the commanded target immediately through the PID and feedforward path. If inrush-current limiting or a soft-start is later needed (for example, to protect the 5 V rail and the HC-06 on the floor), it SHALL be introduced as a new requirement in a separate change rather than by restoring this one.
