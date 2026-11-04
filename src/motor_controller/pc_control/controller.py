@@ -45,14 +45,15 @@ CLAMP_MIN = -100.0
 CLAMP_MAX = 100.0
 # Скорость виртуального tty /dev/rfcomm0. Реальную скорость UART задаёт
 # HC-06 (AT+BAUD8); здесь она должна совпадать, иначе настройка вводит в
-# заблуждение. Должна совпадать с BT_BAUD в motor_controller.ino.
+# заблуждение. Должна совпадать с kBaud в
+# src/motor_controller/motor_controller/src/bluetooth/bt_config.h.
 PORT_BAUD = termios.B115200
 LINK_TIMEOUT_S = 5.0
 
 V_MAX_MM_S = 300.0
 WHEELBASE_MM = 185.0
-# Лимиты должны совпадать с константами V_MAX_MM_S и WHEELBASE_MM в
-# src/motor_controller/motor_controller/motor_controller.ino
+# Лимиты должны совпадать с константами kVMaxMmS и kWheelbaseMm в
+# src/motor_controller/motor_controller/drive_config.h
 OMEGA_MAX_RAD_S = 2.0 * V_MAX_MM_S / WHEELBASE_MM
 
 KEY_UP = (b"\x1b[A", b"\x1bOA")

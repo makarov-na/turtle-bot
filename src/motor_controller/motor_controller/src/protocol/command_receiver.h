@@ -1,7 +1,7 @@
 // --- Приём и разбор команд, watchdog: интерфейс ----------------------------
 // CommandReceiver — чистый разборщик протокола: он не знает ни про привод, ни
 // про Chassis. Наружу отдаёт разобранную команду, а решение, как её применить,
-// принимает Robot.
+// принимает MotorController. Поток внедряется в конструкторе.
 //
 // Реализация — в command_receiver.cpp.
 
@@ -20,9 +20,11 @@ class CommandReceiver {
     float angular;
   };
 
+  explicit CommandReceiver(Stream &serial);
+
   // Читает порт до первой полной валидной команды. Возвращает true, если
   // команда разобрана и записана в out. Невалидные строки игнорируются.
-  bool poll(Stream &serial, uint32_t now, Command &out);
+  bool poll(uint32_t now, Command &out);
 
   // Возвращает true один раз, когда с последней валидной команды прошло
   // больше таймаута watchdog. Вызывающий сам решает, как остановить привод.
@@ -39,6 +41,7 @@ class CommandReceiver {
 
   bool parseCommand_(char *buf, uint32_t now, Command &out);
 
+  Stream *serial_ = nullptr;
   char cmdBuf_[kBufSize];
   uint8_t cmdLen_ = 0;
   bool cmdOverflow_ = false;

@@ -1,7 +1,7 @@
 // --- Приём и разбор команд, watchdog: реализация ---------------------------
 // Watchdog остановлен, пока не пришла первая валидная команда; каждая валидная
 // команда сбрасывает таймер. CommandReceiver только сообщает о срабатывании,
-// остановку выполняет Robot.
+// остановку выполняет MotorController.
 
 #include "command_receiver.h"
 
@@ -15,9 +15,11 @@ const uint32_t kWatchdogTimeoutMs = 1000;
 
 }  // namespace
 
-bool CommandReceiver::poll(Stream &serial, uint32_t now, Command &out) {
-  while (serial.available() > 0) {
-    char c = (char)serial.read();
+CommandReceiver::CommandReceiver(Stream &serial) : serial_(&serial) {}
+
+bool CommandReceiver::poll(uint32_t now, Command &out) {
+  while (serial_->available() > 0) {
+    char c = (char)serial_->read();
     if (c == '\n' || c == '\r') {
       bool valid =
           cmdLen_ > 0 && !cmdOverflow_ && parseCommand_(cmdBuf_, now, out);

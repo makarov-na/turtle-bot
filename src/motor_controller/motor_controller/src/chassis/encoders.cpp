@@ -19,6 +19,9 @@ const uint16_t kEncoderCpr = 11;
 const uint8_t kGearRatio = 56;
 const uint32_t kTicksPerWheelRev = kEncoderCpr * 4UL * kGearRatio;
 
+const uint8_t kLeftEncoder = 0;
+const uint8_t kRightEncoder = 1;
+
 // Один тик не чаще kMinTickUs — защита от дребезга контактов.
 const uint16_t kMinTickUs = 50;
 
@@ -95,7 +98,7 @@ int32_t Encoder::takeTicks() const {
   return snapshot;
 }
 
-void Encoders::begin() {
+void Encoders::init() {
   pinMode(kPinEncLA, INPUT_PULLUP);
   pinMode(kPinEncLB, INPUT_PULLUP);
   pinMode(kPinEncRA, INPUT_PULLUP);
@@ -107,12 +110,16 @@ void Encoders::begin() {
 
 void Encoders::handleInterrupt() {
   uint8_t pins = PINC & 0x0F;
-  encoders_[static_cast<uint8_t>(MotorId::Left)].update((pins >> 2) & 0x03);
-  encoders_[static_cast<uint8_t>(MotorId::Right)].update(pins & 0x03);
+  encoders_[kLeftEncoder].update((pins >> 2) & 0x03);
+  encoders_[kRightEncoder].update(pins & 0x03);
 }
 
-Encoder &Encoders::operator[](MotorId id) {
-  return encoders_[static_cast<uint8_t>(id)];
+Encoder &Encoders::left() {
+  return encoders_[kLeftEncoder];
+}
+
+Encoder &Encoders::right() {
+  return encoders_[kRightEncoder];
 }
 
 ISR(PCINT1_vect) {

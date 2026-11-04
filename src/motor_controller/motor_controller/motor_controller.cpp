@@ -1,19 +1,19 @@
-// --- Композиция модулей: реализация ----------------------------------------
+// --- Блок управления приводом: реализация ----------------------------------
 // Порядок тика: привод, приём команд, кадр телеметрии, watchdog.
-// TelemetryFrame и Telemetry — в telemetry.h/.cpp, CommandReceiver — в
-// command_receiver.h/.cpp, автоконфигурация HC-06 запускается отдельно из
-// setup().
+// MotorController не владеет модулями: ссылки на Chassis, CommandReceiver и
+// Telemetry приходят из основного скетча.
 
-#include "robot.h"
+#include "motor_controller.h"
 
-Robot::Robot(Encoders &encoders) : chassis_(encoders) {}
+MotorController::MotorController(Chassis &chassis, CommandReceiver &commands,
+                                 Telemetry &telemetry)
+    : chassis_(chassis), commands_(commands), telemetry_(telemetry) {}
 
-void Robot::begin() {
-  chassis_.begin();
-  telemetry_.begin(Serial);
+void MotorController::init() {
+  chassis_.init();
 }
 
-void Robot::tick() {
+void MotorController::tick() {
   uint32_t now = millis();
 
   chassis_.tick(now);
@@ -21,7 +21,7 @@ void Robot::tick() {
   // Свежее время для команд: они могли прийти уже после снятия now.
   uint32_t cmdNow = millis();
   CommandReceiver::Command cmd;
-  while (commands_.poll(Serial, cmdNow, cmd)) {
+  while (commands_.poll(cmdNow, cmd)) {
     if (cmd.action == CommandReceiver::Action::PowerStop) {
       chassis_.power_stop();
     } else {

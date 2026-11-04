@@ -46,15 +46,16 @@ enum class BtResult : uint8_t {
 
 }  // namespace
 
-// Единственная публичная точка входа: привязывает конфигуратор к порту и пину
-// индикации, переводит модуль на kBaud, мигает результатом и здоровается с ПК.
+// Конструктор только связывает конфигуратор с портом и пином индикации.
+BtConfigurator::BtConfigurator(HardwareSerial &serial, uint8_t ledPin)
+    : serial_(&serial), ledPin_(ledPin) {}
+
+// Единственная публичная точка входа: переводит модуль на kBaud, мигает
+// результатом и здоровается с ПК.
 // Пока идёт AT-последовательность, встроенный светодиод горит постоянно — так
 // видно, что работает новая прошивка. По выходу Hardware Serial всегда открыт
 // на kBaud.
-void BtConfigurator::btInit(HardwareSerial &serial, uint8_t ledPin) {
-  serial_ = &serial;
-  ledPin_ = ledPin;
-
+void BtConfigurator::init() {
   // Индикатор: горит, пока идёт AT-последовательность.
   pinMode(ledPin_, OUTPUT);
   digitalWrite(ledPin_, HIGH);
